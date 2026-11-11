@@ -1,0 +1,51 @@
+[px] connecting to 127.0.0.1:9411
+[px] connected
+[px] connecting to 127.0.0.1:9412
+[px] connected
+[px] connecting to 127.0.0.1:9411
+[px] connected
+[px] connecting to 127.0.0.1:9412
+[px] connected
+[px] connecting to 127.0.0.1:9411
+[px] connected
+[px] connecting to 127.0.0.1:9412
+[px] connected
+[px] ETW unhooked
+[px] connecting to 127.0.0.1:9411
+[px] connected
+[px] ETW unhooked
+[px] connecting to 127.0.0.1:9412
+[px] connected
+[px] channel encryption enabled
+[px] connecting to 127.0.0.1:9411
+[px] connected
+[px] channel encryption enabled
+[px] connecting to 127.0.0.1:9412
+[px] connected
+[px] EXEC 1 : cmd /c echo PHANTOM_X_ENCRYPTED_PROOF
+[px] DGA host: pxlab-20768-5a17c0de.lab.test
+[px] connecting to pxlab-20768-5a17c0de.lab.test:9411
+[px] connected
+[px] DGA host: pxlab-20768-5a17c0de.lab.test
+[px] connecting to pxlab-20768-5a17c0de.lab.test:9412
+[px] connected
+[px] connecting to 127.0.0.1:9411
+[px] connected
+[px] connecting to 127.0.0.1:9412
+[px] connected
+[px] connecting to 127.0.0.1:9411
+[px] connected
+[px] connecting to 127.0.0.1:9412
+[px] connected
+[px] AMSI bypass not applied (amsi.dll absent or not patchable)
+[px] ETW unhooked
+[px] channel encryption enabled
+[px] DGA host: pxlab-20768-5a17c0de.lab.test
+[px] connecting to pxlab-20768-5a17c0de.lab.test:9411
+[px] connected
+[px] AMSI bypass not applied (amsi.dll absent or not patchable)
+[px] ETW unhooked
+[px] channel encryption enabled
+[px] DGA host: pxlab-20768-5a17c0de.lab.test
+[px] connecting to pxlab-20768-5a17c0de.lab.test:9412
+[px] connected

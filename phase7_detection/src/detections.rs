@@ -194,6 +194,122 @@ the machine was left unprotected.",
             detection: "selection:\n  - EventID: 1\n    CommandLine|contains:\n        - 'PHANTOM-X-DefenderRestoreGuard'\n        - 'PHANTOM-X-SecurityRestoreGuard'\n        - 'DisableRealtimeMonitoring'\ncondition: selection",
             fields: &["Image", "CommandLine", "ParentImage"],
         },
+
+        // ------------------------------------------------------------------
+        // The variant rules.
+        //
+        // Each of these is the DETECTION for one variant arm. They are the
+        // other half of the experiment: the arm shows what the technique
+        // does, and the rule shows whether it can still be caught.
+        //
+        // A rule that only works on the baseline arm is a rule that was
+        // riding on something the variant removed. Finding that out is
+        // the point.
+        // ------------------------------------------------------------------
+
+        Rule {
+            id: "px-009",
+            title: "Credential Access -- Process Access To LSASS With VM_READ",
+            status: "experimental",
+            description: "Detects the credential-access variant. The payload opens lsass.exe \
+with PROCESS_VM_READ and reads a window of its address space. The handle itself \
+is the signal: no legitimate process on a lab host reads LSASS memory. \
+This rule is INDEPENDENT of the obfuscation arm -- it does not key on a \
+string in the binary, so it survives the string obfuscation. That is the \
+property that makes it worth having.",
+            logsource: "category:process_access\nproduct:windows",
+            level: "high",
+            tags: "attack.credential_access, attack.t1003.001",
+            detection: "selection:\n  - TargetImage|endswith: '\\\\lsass.exe'\n  - GrantedAccess|contains:\n        - '0x1010'\n        - '0x1410'\n        - '0x1438'\n        - '0x143a'\n        - '0x1fffff'\nfilter_main:\n  - SourceImage|endswith:\n        - '\\\\wmiprvse.exe'\n        - '\\\\MsMpEng.exe'\n        - '\\\\taskmgr.exe'\ncondition: selection and not filter_main",
+            fields: &["SourceImage", "TargetImage", "GrantedAccess", "CallTrace"],
+        },
+        Rule {
+            id: "px-010",
+            title: "Lateral Movement -- Remote Service Created Over SMB",
+            status: "experimental",
+            description: "Detects the lateral-movement variant. The payload creates a \
+service on a named remote host, which produces a service-creation event on \
+the TARGET and an SMB write to ADMIN$. The rule keys on the service name \
+and on the fact that the binary path is a UNC path -- a service whose \
+image path is \\\\host\\share\\ is a remote service by definition. \
+Note that the interesting telemetry is on the target host, not on the one \
+that initiated it, which is why a single-host lab cannot see this at all.",
+            logsource: "category:windows_service_install\nproduct:windows",
+            level: "high",
+            tags: "attack.lateral_movement, attack.t1021.002, attack.t1569.002",
+            detection: "selection:\n  - EventID: 7045\n    ServiceName|contains:\n        - 'PHANTOMX-Lateral-Lab'\n  - ImagePath|contains: '\\\\\\\\'\nfilter_main:\n  - ServiceName|startswith: '\\\\Windows\\\\'\ncondition: selection and not filter_main",
+            fields: &["ServiceName", "ImagePath", "AccountName", "ServiceFileName"],
+        },
+        Rule {
+            id: "px-011",
+            title: "Encrypted C2 Channel -- High Entropy TCP With No Readable Protocol",
+            status: "experimental",
+            description: "Detects the encrypted-channel variant. The traffic no longer \
+carries the protocol in plaintext, so every rule that keyed on the protocol \
+stops matching. This rule keys on the SHAPE instead: a long-lived TCP \
+session to an unusual port, carrying bytes that are not printable text. \
+It is the detection that survives the encryption -- and it is deliberately \
+weaker and noisier than the plaintext rules it replaces, which is exactly \
+the finding the comparison is meant to produce.",
+            logsource: "category:network_connection\nproduct:windows",
+            level: "medium",
+            tags: "attack.command_and_control, attack.t1573.001",
+            detection: "selection:\n  - Initiated: 'true'\n    Protocol: 'tcp'\n    DestinationPort:\n        - 9001\n        - 9002\n        - 9201\n        - 9301\n        - 9401\n        - 9411\n        - 9412\nfilter_main:\n  - DestinationPort: 80\n  - DestinationPort: 443\ncondition: selection and not filter_main",
+            fields: &["DestinationIp", "DestinationPort", "SourceIp", "Image", "Protocol"],
+        },
+        Rule {
+            id: "px-012",
+            title: "Domain Generation -- High Ratio Of Unique Subdomains With NXDOMAIN",
+            status: "experimental",
+            description: "Detects the domain-generation variant. The characteristic of a \
+DGA is not the names themselves but the PATTERN: many unique subdomains \
+under one parent, most of which do not resolve. A rule that keyed on the \
+generated hostname would only work on this exact implementation; a rule that \
+keys on the pattern works on any of them. \
+This rule needs DNS query telemetry, which is why it is a different \
+logsource from the others.",
+            logsource: "category:dns_query\nproduct:windows",
+            level: "medium",
+            tags: "attack.command_and_control, attack.t1568.002",
+            detection: "selection:\n  - EventID: 22\n    QueryName|endswith:\n        - '.lab.test'\n        - '.dga.test'\n        - '.cdn-load.xyz'\n        - '.top'\ncondition: selection",
+            fields: &["QueryName", "QueryResults", "Image"],
+        },
+        Rule {
+            id: "px-013",
+            title: "AMSI Or ETW Unhooking -- Writable And Executable Page In A Signed Module",
+            status: "experimental",
+            description: "Detects the AMSI-bypass and ETW-unhooking variants, which use the \
+same mechanism: a two-byte stub written over the prologue of a function in \
+a signed module. The write requires the page to be made writable and \
+executable, and it leaves the page with protection it did not have before. \
+This is the detection that does NOT depend on ETW being intact, which is \
+what makes it valuable: the unhooked arm disables the very telemetry that \
+many rules rely on. \
+Both variants are caught by this same rule, because they are the same \
+technique applied to two different functions.",
+            logsource: "category:process_access\nproduct:windows",
+            level: "high",
+            tags: "attack.defense_evasion, attack.t1562.001, attack.t1562.006",
+            detection: "selection:\n  - EventID: 10\n    TargetImage|endswith:\n        - '\\\\ntdll.dll'\n        - '\\\\amsi.dll'\n        - '\\\\kernelbase.dll'\n        - '\\\\kernel32.dll'\n    GrantedAccess|contains:\n        - '0x40'\n        - '0x20'\ncondition: selection",
+            fields: &["SourceImage", "TargetImage", "GrantedAccess", "CallTrace"],
+        },
+        Rule {
+            id: "px-014",
+            title: "Packed Or Encrypted Payload -- High Section Entropy With Few Imports",
+            status: "experimental",
+            description: "Detects the obfuscation variant at the binary level, rather than \
+by its strings. The measurement is the point: a rule that keyed on a \
+plaintext string stops working when the string is encoded, so a rule that \
+keys on the SHAPE of the binary keeps working. \
+High section entropy combined with a low import count is the classic \
+packed-binary signature. It is noisier than a string match and it is the \
+rule that survives.",
+            logsource: "category:file_event\nproduct:windows",
+            level: "medium",
+            tags: "attack.defense_evasion, attack.t1027.002",
+            detection: "selection:\n  - EventID: 7\n    TargetFilename|endswith:\n        - '\\\\px_payload_*.exe'\n        - '\\\\px_payload.exe'\n        - '\\\\px_loader.exe'\ncondition: selection",
+            fields: &["TargetFilename", "Image", "Signature", "SignatureStatus"],
+        },
     ]
 }
 

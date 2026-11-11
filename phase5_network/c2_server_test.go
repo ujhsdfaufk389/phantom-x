@@ -148,15 +148,30 @@ func TestGoC2Integration(t *testing.T) {
 	// -- clean termination ---------------------------------------------------
 	srv.audit.write("test_kill", map[string]any{"session": sess.id})
 	sess.send("EXIT")
+
+	// The acknowledgement is the payload CLOSING THE CONNECTION, not the
+	// server's own alive flag. The server sets that flag when it sends the
+	// EXIT, so it can never go false on its own -- checking it would only
+	// be checking that the server did what it just did.
+	//
+	// The payload closes the socket once it has read the EXIT, so the
+	// session disappearing from the server's table is the signal that the
+	// handshake completed.
 	termDeadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(termDeadline) {
-		if !sess.alive {
+		srv.sessionsMu.Lock()
+		_, still := srv.sessions[sess.id]
+		srv.sessionsMu.Unlock()
+		if !still {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	if sess.alive {
-		t.Fatal("payload did not acknowledge EXIT")
+	srv.sessionsMu.Lock()
+	_, still := srv.sessions[sess.id]
+	srv.sessionsMu.Unlock()
+	if still {
+		t.Fatal("payload did not acknowledge EXIT (the session never closed)")
 	}
 	t.Log("payload acknowledged EXIT")
 

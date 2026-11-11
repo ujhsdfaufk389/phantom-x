@@ -43,10 +43,69 @@ Enforced across every phase, not just stated.
 1. **Defender stays on** during measurement. The Defender A/B toggle exists to produce a *documented coverage gap*, and it restores with a 60-second guard task so the VM cannot be left unprotected.
 2. **No fabricated results.** Every number came from an actual run. Where a result is pending, it says pending.
 3. **Structure ≠ execution.** A `/Launch` action is a request. A `VirtualAlloc` is an allocation. Reports keep these apart.
-4. **Bounded scope.** The payload only ever affects its own process. No injection into unrelated processes, no persistence, no credential access, no lateral movement.
-5. **Deliberately plain.** No obfuscation, no AMSI bypass, no ETW unhooking, no encrypted channel, no domain generation. A payload that evades produces no signal to analyse — which would defeat the purpose of a detection study.
+4. **Bounded scope.** The payload only ever affects its own process. No injection into unrelated processes, no persistence. Credential access and lateral movement exist only as lab-scoped variants with the bounds described below.
+5. **The baseline stays plain.** The default build has no obfuscation, no AMSI bypass, no ETW unhooking, no encrypted channel and no domain generation -- so it produces the clean baseline telemetry. The evasion techniques exist as separate builds, each measured against that baseline and each paired with a detection. A payload that evades produces no signal to analyse; that is why the SIGNAL arm and the EVASION arm are both needed, and why the finding is about the rule rather than about the payload.
 6. **Cross-validate before trusting.** Every analyzer is checked against an independent implementation.
 7. **Isolated by default.** The research VM is default-deny on egress and cannot reach the home network. The isolation is set up and verified before any payload is placed on the machine.
+8. **Variants are the experiment.** The baseline payload is plain. The variant builds add one capability each -- obfuscated strings, an AMSI bypass, an ETW unhook, an encrypted channel, domain generation, credential access, lateral movement -- and each has a detection written alongside it. The difference in what the endpoint sees is the finding, and the finding is about the RULE, not about the payload.
+
+---
+
+## The variant matrix
+
+The lab's question is never "does this technique work". It is always
+"what changes in what the endpoint sees when this technique is used", and
+that can only be answered by running both arms and comparing.
+
+```
+baseline   plain payload, everything visible
+obfuscate  the sensitive strings are encoded, so they are not in the binary
+amsi       AMSI is patched so it reports clean without scanning
+etw        ETW is patched so it returns without tracing
+encrypt    the C2 channel is encrypted, so the protocol is not on the wire
+dga        the C2 address is a generated hostname that changes daily
+cred       credential access against the lab VM
+lateral    movement to a second lab host
+full       everything at once -- the worst case a defender has to catch
+```
+
+```powershell
+cd phase3_fileless\loader
+.\build_variants.ps1 -C2Host 192.168.77.1 -C2Port 9001
+```
+
+Every capability is compiled in or out at build time, never switched at
+runtime. A capability that is not compiled in cannot be detected, and
+"present but disabled" is not the same thing as "not present".
+
+The obfuscated arm is verified at build time: the build scans the
+compiled binary for every sensitive literal and reports whether any
+survived.
+
+```
+baseline : 11/19 needles visible
+obfuscate: no needle found -- the arm is clean
+```
+
+See `phase7_detection/README.md` for what each variant measures, and
+`phase7_detection/src/detections.rs` for the rules that detect them.
+
+### Two capabilities are bounded on purpose
+
+**Credential access collects, but the secret material does not go on the
+wire.** The C2 server is a plain TCP listener; if the operator runs it on
+a routable address -- and running a C2 somewhere reachable is the entire
+point of a C2 -- then a payload that ships real credential material there
+has published those credentials to whoever can reach that address too.
+The detection question is answered by the ACCESS (the handle to lsass.exe,
+the memory reads), not by the contents, so the redacted report is a
+complete measurement.
+
+**Lateral movement moves to ONE explicitly named host, supplied by the
+operator.** No scanning, no target list, no propagation. A payload that
+moves itself is a worm, and a worm on a lab segment reaches every lab
+host the moment the operator forgets to clean up -- at which point the
+lab's telemetry stops being repeatable.
 
 ---
 
@@ -60,6 +119,7 @@ actually needs rather than for what is fashionable:
 | `px_payload.exe` | **C** (freestanding) | It is reflectively mapped by hand. A CRT startup needs a TLS index that only the Windows loader assigns, so the payload cannot link one. See the bug list below. |
 | `px_loader.exe` | **C** | Same reason: it maps another PE by hand and must not depend on loader state. |
 | `px_hollow.exe` | **C** | Same. |
+| the variant modules | **C** | `px_amsi.c`, `px_etw.c`, `px_crypt.c`, `px_dga.c`, `px_cred.c`, `px_lateral.c`, `px_obfuscate.c`. Each is a no-op when its capability is not compiled in, so the baseline binary genuinely does not contain the capability. |
 | `px_c2.exe` | **Go** | The operator side. One static binary with no runtime dependency, cross-compiles to Linux for the Kali rig, and speaks the same wire protocol so the C payload is unchanged. |
 | `px_pdfscan.exe` | **Rust** | The independent PDF scanner. Reads hostile input, so memory safety is worth having, and it must run on the VM where Python may not be installed. |
 | `px_detect.exe` | **Rust** | The detection rule generator. No crates, so it builds offline and there is nothing to audit but the source. |
@@ -163,8 +223,22 @@ phantom-x/
 │   │   ├── px_loader.c/.exe         PDF extractor + reflective PE mapper
 │   │   ├── px_payload.c/.exe        freestanding C2 client
 │   │   ├── px_hollow.c/.exe         PDF extractor + remote process mapper
+│   │   ├── px_config.h              the variant switches, all OFF by default
+│   │   ├── px_strings.def           the sensitive string list (one source)
+│   │   ├── px_strings.h             GENERATED -- the encoded table
+│   │   ├── px_obfuscate.c           the string decoder
+│   │   ├── px_amsi.c                AMSI bypass variant
+│   │   ├── px_etw.c                 ETW unhooking variant
+│   │   ├── px_crypt.c               the channel cipher
+│   │   ├── px_dga.c                 domain generation variant
+│   │   ├── px_cred.c                credential access variant
+│   │   ├── px_lateral.c             lateral movement variant
+│   │   ├── px_variant.h             the interface the variants share
+│   │   ├── tools/gen_strings.py     the build-time string encoder
+│   │   ├── ks_vector.c              the keystream vector generator
 │   │   ├── build_lab.sh/.ps1        rebuild everything
-│   │   └── build_all.ps1            build EVERY component on Windows
+│   │   ├── build_all.ps1            build EVERY component on Windows
+│   │   └── build_variants.ps1       build the variant matrix
 │   ├── native/                      C++ native loader
 │   └── dotnet/                      C# reflective loader variant
 ├── phase4_defender/
@@ -178,9 +252,15 @@ phantom-x/
 │   ├── c2_server.py                 lab C2 with sessions, latency, JSONL audit
 │   ├── c2_server.go                 GO implementation of the same protocol
 │   ├── c2_server_test.go            drives the REAL payload against the Go server
+│   ├── crypt.go                     the channel cipher, server side
+│   ├── crypt_test.go                the keystream vector test
+│   ├── variants.go                  the capability report
+│   ├── variants_test.go             the variant arm tests
+│   ├── dga_dns.py                   the lab DNS helper for the DGA arm
+│   ├── validate_c2_equivalence.py   Go C2 server vs the Python reference
 │   ├── test_c2_integration.py       payload-level integration test
 │   └── test_chain_integration.py    FULL chain integration test
-└── phase6_reports/                  structured JSON reports
+├── phase6_reports/                  structured JSON reports
 └── phase7_detection/                DEFENSIVE DELIVERABLE
     ├── src/detections.rs            the Sigma rules, with their reasoning
     ├── src/main.rs                  px_detect CLI
@@ -277,3 +357,11 @@ been shipped as a result:
 - The Go C2 server's `Accept()` blocked forever, so `--duration` never fired and the server could not shut itself down. The Python server had no such problem, which is exactly why writing the comparison was worth the effort.
 - The Rust scanner did not walk the catalog's `/Names` JavaScript tree, so it missed the script in a document whose only JavaScript was a named entry. Found by the cross-validation harness against the Python reference.
 - The Rust scanner counted one action twice when the same action dictionary was reachable from both a name tree and a page's `/AA`. Found by the same harness, which compared counts rather than assuming they matched.
+- The string obfuscator only encoded the strings that were already in the table, and the verification showed that `lsass.exe`, `amsi.dll`, `ws2_32.dll`, `HELLO|`, `RESULT|` and `PX_C2_HOST` were all still plainly visible in the compiled variant. A partially obfuscated payload is one where a defender greps for the string that was missed and finds it immediately. Found by scanning the compiled binary for the literals, not by reading the source.
+- The C payload's channel key fell back to the literal text `"PX_C2_KEY"` -- the NAME of the environment variable -- instead of the compiled-in default key. The server used the real default, so the two derived different keystreams and the encrypted session died at the first frame.
+- The keystream generator did not match between the C and Go implementations. C promotes `unsigned char` to `int` before adding; Go does not promote, so `byte + byte` wraps. The two therefore picked different indices once a sum exceeded 255 -- which is why the first few bytes of the keystream matched and then diverged. Found by pinning the keystream to a vector generated from the C side.
+- The payload's decrypt was given the frame BODY instead of the whole frame, so the length check failed on every frame and the session died at the first exchange with a log line that pointed at the cipher rather than at the framing.
+- The C2 server's plaintext reader used `ReadString('\n')`, which reads whatever has arrived in one go. The CAPS line and the beginning of the first encrypted frame arrived in the same TCP segment, so the reader swallowed the frame's first bytes and the keystream desynchronised before the first frame was ever decrypted.
+- The server sent a PING before the handshake was complete, because `measureLatency` did not wait for the CAPS report. The payload read the plaintext PING as a frame header and the session died.
+- The Go server's byte-at-a-time reader broke out of the INNER loop on a read error but not the outer one, so it spun forever and never wrote its `session_close` record. The cross-implementation comparison reported it as a difference between the two servers.
+- The obfuscated string table was compiled only into the obfuscated arm, so the other arms' calls to `px_obf_decode` hit a stub that returned nothing -- which is why the encrypted arm had no channel key at all. The table is about what the program can look up at runtime; the obfuscation is about what the compiler puts in the binary. Those are different questions.

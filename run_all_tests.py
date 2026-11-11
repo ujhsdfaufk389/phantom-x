@@ -185,6 +185,139 @@ def test_sha256() -> Result:
                   time.time() - t0)
 
 
+def test_variants() -> Result:
+    """The variant arms, driven against the Go server.
+
+    Each arm is a separate build with a separate wire behaviour, so each
+    one needs its own check. A test that only exercised the baseline
+    would pass whether or not the variant code worked at all.
+    """
+    name = "variant arms"
+    go = find_tool("go.exe", r"%ProgramFiles%\Go\bin\go.exe")
+    if not go:
+        return Result(name, False, "Go toolchain not found", 0.0)
+
+    variants_dir = os.path.join(ROOT, "dist", "variants")
+    if not os.path.isdir(variants_dir):
+        return Result(name, False, "no variant builds (run build_variants.ps1)", 0.0)
+
+    t0 = time.time()
+    ok = True
+    detail = []
+
+    # The lab DNS helper.
+    #
+    # The domain generation arm connects to a generated hostname, which
+    # only resolves if the helper is running. The helper binds to the
+    # loopback interface and answers only the lab's own names, so it is
+    # safe to run during the suite.
+    dns_proc = None
+    dns_port = 15353
+    dns_script = os.path.join(ROOT, "phase5_network", "dga_dns.py")
+    if os.path.isfile(dns_script):
+        dns_proc = subprocess.Popen(
+            [sys.executable, dns_script, "--host", "127.0.0.1",
+             "--port", str(dns_port), "--c2", "127.0.0.1",
+             "--duration", "300"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        )
+        time.sleep(1.0)
+        # The payload resolves through the system resolver, so the helper
+        # has to be reachable by name. The hosts entry is what makes that
+        # work without touching the machine's DNS configuration.
+        _add_hosts_entry()
+
+    try:
+        for arm in ("baseline", "obfuscate", "amsi", "etw", "encrypt",
+                    "dga", "cred", "lateral", "full"):
+            exe = os.path.join(variants_dir, f"px_payload_{arm}.exe")
+            if not os.path.isfile(exe):
+                detail.append(f"{arm}=missing")
+                ok = False
+                continue
+            p = subprocess.run(
+                [go, "test", "-count=1", "-timeout", "120s", "-v",
+                 "-run", "TestVariant", "-variant", exe, "."],
+                cwd=os.path.join(ROOT, "phase5_network"),
+                capture_output=True, text=True, timeout=300,
+                env=dict(os.environ),
+            )
+            out = (p.stdout or "") + (p.stderr or "")
+            # A SKIP is not a failure. The baseline arm has no encrypted
+            # channel, so the encrypted-channel test skips it, and
+            # `go test` still exits non-zero for a package where every
+            # test skipped. The per-test result lines are what matter,
+            # not the exit code.
+            if "--- FAIL" in out:
+                detail.append(f"{arm}=FAIL")
+                ok = False
+            elif "--- PASS" in out:
+                detail.append(f"{arm}=pass")
+            elif "--- SKIP" in out:
+                detail.append(f"{arm}=skip")
+            elif "no test files" in out or "cannot find" in out:
+                detail.append(f"{arm}=error")
+                ok = False
+            else:
+                detail.append(f"{arm}=unknown")
+                ok = False
+    finally:
+        if dns_proc is not None:
+            dns_proc.terminate()
+            try:
+                dns_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                dns_proc.kill()
+        _remove_hosts_entry()
+
+    return Result(name, ok, ", ".join(detail), time.time() - t0)
+
+
+# The hosts entry that lets the DGA arm resolve its generated name to the
+# lab DNS helper. It is removed again when the suite finishes.
+#
+# The entry is for a name in the lab's own TLD, so it cannot shadow
+# anything on the real internet.
+_HOSTS = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"),
+                      "System32", "drivers", "etc", "hosts")
+_DGA_MARKER = "# PHANTOM-X lab DNS helper (added by run_all_tests.py)"
+
+
+def _dga_name_for_today() -> str:
+    """The DGA name for today, matching px_dga.c."""
+    import datetime
+    seed = (datetime.datetime.now(datetime.timezone.utc)
+            - datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)).days
+    return f"pxlab-{seed}-5a17c0de.lab.test"
+
+
+def _add_hosts_entry() -> None:
+    try:
+        with open(_HOSTS, "r", encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+        if _DGA_MARKER in text:
+            return
+        with open(_HOSTS, "a", encoding="utf-8") as fh:
+            fh.write(_DGA_MARKER + "\n")
+            fh.write(f"127.0.0.1 {_dga_name_for_today()}\n")
+    except OSError:
+        # The hosts file may not be writable. The DGA arm then skips,
+        # which the suite reports.
+        pass
+
+
+def _remove_hosts_entry() -> None:
+    try:
+        with open(_HOSTS, "r", encoding="utf-8", errors="replace") as fh:
+            lines = fh.readlines()
+        kept = [ln for ln in lines
+                if _DGA_MARKER not in ln and "pxlab-" not in ln]
+        with open(_HOSTS, "w", encoding="utf-8") as fh:
+            fh.writelines(kept)
+    except OSError:
+        pass
+
+
 def test_pypdf() -> Result:
     """The PDF inspector against pypdf, if it is installed."""
     name = "PDF inspector vs pypdf"
@@ -234,7 +367,7 @@ def main(argv=None) -> int:
         test_go_c2_integration,
     ]
     if not args.quick:
-        tests += [test_pypdf, test_sysmon_schema]
+        tests += [test_variants, test_pypdf, test_sysmon_schema]
 
     results = []
     for fn in tests:
