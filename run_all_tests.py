@@ -353,6 +353,28 @@ def _remove_hosts_entry() -> None:
         pass
 
 
+def test_evaluator() -> Result:
+    """The rule evaluator's own semantics.
+
+    The evaluator is what makes the lab's output trustworthy. If its
+    semantics are wrong, "this rule did not fire" means nothing -- it
+    might just mean the evaluator is broken, and the report would look
+    like a successful measurement of a rule that is actually fine.
+    """
+    name = "rule evaluator"
+    script = os.path.join(ROOT, "phase8_evaluation", "test_evaluator.py")
+    if not os.path.isfile(script):
+        return Result(name, False, "test_evaluator.py not found", 0.0)
+    ok, out = run([sys.executable, script], timeout=300)
+    detail = "PASS"
+    for line in out.splitlines():
+        if "passed," in line:
+            detail = line.strip()
+    if not ok:
+        detail = "FAIL"
+    return Result(name, ok, detail, 0.0)
+
+
 def test_pypdf() -> Result:
     """The PDF inspector against pypdf, if it is installed."""
     name = "PDF inspector vs pypdf"
@@ -402,7 +424,7 @@ def main(argv=None) -> int:
         test_go_c2_integration,
     ]
     if not args.quick:
-        tests += [test_variants, test_resilient_reconnect,
+        tests += [test_variants, test_resilient_reconnect, test_evaluator,
                   test_pypdf, test_sysmon_schema]
 
     results = []

@@ -90,6 +90,59 @@ obfuscate: no needle found -- the arm is clean
 See `phase7_detection/README.md` for what each variant measures, and
 `phase7_detection/src/detections.rs` for the rules that detect them.
 
+---
+
+## The loop: telemetry -> rules -> findings
+
+The variant matrix is only half a lab. The other half is answering the
+question the matrix exists to pose:
+
+> **which of my rules still work once the payload is obfuscated, once ETW
+> is unhooked, once the channel is encrypted?**
+
+Without that, the lab is a collection of samples with some rules next to
+them. With it, the lab is a measurement.
+
+```
+  arm built  ->  run on the VM  ->  telemetry collected  ->  rules evaluated
+       ^                                                              |
+       |                                                              v
+       +--------------  which rules survived?  <-----------  the finding
+```
+
+```powershell
+# on the VM
+cd C:\pxvm\phase8_evaluation
+.\collect_events.ps1 -Label baseline_arm
+```
+
+```bash
+# on the host
+phase7_detection/target/release/px_detect.exe --emit json > rules.json
+
+python3 phase8_evaluation/coverage.py \
+    --rules rules.json \
+    --baseline events_baseline_arm.json \
+    --variant events_obfuscate_arm.json
+```
+
+The output that matters:
+
+```
+  RULES THAT FIRED ON THE BASELINE AND ARE SILENT ON THE VARIANT
+  (these were riding on something the variant removed)
+
+    px-002  PDF File Opened By An Unusual Loader Process
+    px-004  Process Created From PDF With Embedded PE Payload
+```
+
+That is the finding, and it is about the RULE rather than about the
+payload. A rule that stops working when a string is encoded was never
+really detecting the technique -- it was detecting a string.
+
+The rules are structured data, not text, so the Sigma output and the
+machine-readable form come from one definition and cannot drift.
+
 ### Two capabilities are bounded on purpose
 
 **Credential access collects, but the secret material does not go on the
@@ -261,10 +314,16 @@ phantom-x/
 │   ├── test_c2_integration.py       payload-level integration test
 │   └── test_chain_integration.py    FULL chain integration test
 ├── phase6_reports/                  structured JSON reports
-└── phase7_detection/                DEFENSIVE DELIVERABLE
-    ├── src/detections.rs            the Sigma rules, with their reasoning
-    ├── src/main.rs                  px_detect CLI
-    └── README.md
+├── phase7_detection/                DEFENSIVE DELIVERABLE
+│   ├── src/detections.rs            the rules, as data (Sigma + JSON from one source)
+│   ├── src/main.rs                  px_detect CLI
+│   └── README.md
+├── phase8_evaluation/               THE LOOP: telemetry -> rules -> findings
+│   ├── px_eval.py                   the rule evaluator
+│   ├── coverage.py                  the coverage matrix and the gap report
+│   ├── collect_events.ps1           telemetry collection on the VM
+│   ├── make_synthetic_events.py     the evaluator test fixtures
+│   └── test_evaluator.py            153 assertions on the evaluator semantics
 ```
 
 ---

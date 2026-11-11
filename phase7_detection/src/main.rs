@@ -59,7 +59,21 @@ fn main() -> ExitCode {
                     ExitCode::SUCCESS
                 }
                 "json" => {
-                    println!("{}", detections::to_json());
+                    // The machine-readable form, consumed by the rule
+                    // evaluator in phase8_evaluation. It is a direct
+                    // translation of the same definition the Sigma text
+                    // is rendered from, so the two cannot disagree.
+                    println!("[");
+                    let rules = detections::rules();
+                    for (i, r) in rules.iter().enumerate() {
+                        print!("{}", r.to_json());
+                        if i + 1 < rules.len() {
+                            println!(",");
+                        } else {
+                            println!();
+                        }
+                    }
+                    println!("]");
                     ExitCode::SUCCESS
                 }
                 other => {
@@ -105,8 +119,12 @@ fn print_rule(r: &Rule) {
     println!("title       : {}", r.title);
     println!("status      : {}", r.status);
     println!("level       : {}", r.level);
-    println!("tags        : {}", r.tags);
-    println!("logsource   :\n{}", r.logsource);
+    println!("tags        : {}", r.techniques.join(", "));
+    println!("catches     : {}", r.catches);
+    println!("logsource   :");
+    for (k, v) in &r.logsource {
+        println!("  {}: {}", k, v);
+    }
     println!("\nwhy this rule exists:\n{}", r.description);
     println!("\nkeyed on:");
     for f in r.fields {
