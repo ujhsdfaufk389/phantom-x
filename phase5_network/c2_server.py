@@ -198,6 +198,13 @@ class C2Server:
             self.shutdown()
 
     def shutdown(self):
+        # Idempotent. shutdown() can legitimately be reached twice: once
+        # from start()'s finally block and once from an explicit caller.
+        # Without this guard the audit log got two "server_stop" records
+        # for one shutdown, which made the Go/Python cross-validation
+        # report a difference that was not a protocol difference.
+        if not self.running and not self.srv:
+            return
         self.running = False
         with self.session_lock:
             for sess in list(self.sessions.values()):
@@ -264,6 +271,19 @@ class C2Server:
                         sess.latency_ms = (time.time() - rec["t0"]) * 1000.0
                         self.audit.write("pong", session=sess.id,
                                          latency_ms=round(sess.latency_ms, 3))
+            # A PONG that matches no outstanding PING is still an event
+            # worth recording: it means the peer sent traffic the server
+            # did not ask for, which is either a desync or something else.
+            # The lab's rule is that nothing is done quietly, so this is
+            # logged either way.
+            with sess.pending_lock:
+                matched = any(rec.get("type") == "ping"
+                              for rec in sess.pending.values())
+            if not matched:
+                self.audit.write("pong", session=sess.id,
+                                 latency_ms=round(sess.latency_ms, 3)
+                                 if sess.latency_ms is not None else None,
+                                 unmatched=True)
             return
 
         if kind == "RESULT":

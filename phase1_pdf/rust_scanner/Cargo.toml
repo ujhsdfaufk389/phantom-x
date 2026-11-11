@@ -1,0 +1,22 @@
+[package]
+name = "px_pdfscan"
+version = "0.1.0"
+edition = "2021"
+description = "PHANTOM-X independent read-only PDF structure and action scanner"
+license = "MIT"
+
+[[bin]]
+name = "px_pdfscan"
+path = "src/main.rs"
+
+[dependencies]
+# none on purpose. The scanner must build offline with nothing but a Rust
+# toolchain, and a parser that reads hostile input should not depend on
+# code nobody in the lab has read.
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

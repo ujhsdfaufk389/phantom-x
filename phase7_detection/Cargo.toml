@@ -1,0 +1,14 @@
+[package]
+name = "px_detect"
+version = "0.1.0"
+edition = "2021"
+description = "PHANTOM-X defensive detection rules for the fileless PDF chain"
+license = "MIT"
+
+[[bin]]
+name = "px_detect"
+path = "src/main.rs"
+
+[dependencies]
+# none on purpose: the tool must build in an offline lab with nothing but
+# a Rust toolchain, and it must be easy to audit.

