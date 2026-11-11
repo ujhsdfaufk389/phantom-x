@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+phase1_pdf/quarantine/
+phase6_reports/*.raw
+phase3_fileless/loader/*.exe
+phase3_fileless/loader/px_payload_running.txt
+phase4_defender/run_chain_on_vm.ps1

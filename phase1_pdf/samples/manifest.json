@@ -1,0 +1,121 @@
+{
+  "schema": "phantom-x.phase1.sample-manifest/1.0",
+  "generated_utc": "2026-11-10T21:10:31.662256+00:00",
+  "safety": {
+    "all_payloads_inert": true,
+    "javascript_scope": "app.alert only",
+    "launch_targets": "harmless local .txt names only",
+    "uri_targets": "example.com (reserved documentation domain)",
+    "exploit_content": "none"
+  },
+  "samples": [
+    {
+      "file": "px01_clean_baseline.pdf",
+      "description": "Control: no active content. Use as the differential baseline.",
+      "size_bytes": 876,
+      "sha256": "851fc503b6a210442a357f07703d15633f28daea729126b17e0f14576ee1f6e8",
+      "features": []
+    },
+    {
+      "file": "px02_embedded_text.pdf",
+      "description": "Inert text attachment via name tree + FileAttachment annotation.",
+      "size_bytes": 1448,
+      "sha256": "63c8ccc119fa9b93d791dd880f29d5fe659fce72a44ae1c0bbc05c24c9485f61",
+      "features": [
+        "attachment_annotation",
+        "embedded_file"
+      ]
+    },
+    {
+      "file": "px03_embedded_exe_canary.pdf",
+      "description": "Inert 'MZ'-prefixed text canary. Probes attachment-content inspection.",
+      "size_bytes": 1526,
+      "sha256": "2b78fa608c86e852e845854356a30378c6992cd80dec324f78d91f9011dde48d",
+      "features": [
+        "embedded_file"
+      ]
+    },
+    {
+      "file": "px04_javascript.pdf",
+      "description": "Document-level JavaScript (app.alert only).",
+      "size_bytes": 1445,
+      "sha256": "e83e1a002199a214b4a530e724dc1c9dadcb6b4ed5f16c5160693e20f4478b40",
+      "features": [
+        "javascript"
+      ]
+    },
+    {
+      "file": "px05_launch_action.pdf",
+      "description": "Launch action naming a harmless local text file.",
+      "size_bytes": 940,
+      "sha256": "2cab991413c21d222e9b9ba8bd695077aa93f4ef61c3a0a2230f54feb7d260d1",
+      "features": [
+        "launch"
+      ]
+    },
+    {
+      "file": "px06_uri_action.pdf",
+      "description": "URI action to example.com.",
+      "size_bytes": 935,
+      "sha256": "f39f8cfbc1c328cc64fc9c1ac39880b317d82ff338820ed9dd323a1150f47ded",
+      "features": [
+        "uri"
+      ]
+    },
+    {
+      "file": "px07_openaction_js.pdf",
+      "description": "Catalog OpenAction executing JavaScript.",
+      "size_bytes": 1009,
+      "sha256": "16a14bcbc9b864061494ba7aacfec274e446773caa63567669c38c4a9ed52896",
+      "features": [
+        "javascript",
+        "openaction"
+      ]
+    },
+    {
+      "file": "px08_gotor_remote.pdf",
+      "description": "GoToR action referencing an external PDF path.",
+      "size_bytes": 942,
+      "sha256": "91347c9f6a253fd3c5c7db642fa93c0d17a5c52773d8dd13b86f7ca323688a25",
+      "features": [
+        "gotor"
+      ]
+    },
+    {
+      "file": "px09_form_with_action.pdf",
+      "description": "AcroForm field with JS event handlers.",
+      "size_bytes": 1199,
+      "sha256": "656fa649797c4ecefeed8b67e73a0dfdaaf6775236330f770b235020739bcf87",
+      "features": [
+        "form",
+        "javascript"
+      ]
+    },
+    {
+      "file": "px10_embedded_pdf.pdf",
+      "description": "Nested PDF embedded as an attachment.",
+      "size_bytes": 1715,
+      "sha256": "9c6c5514d99ea66eec5dfd56ff66227d85779ccf2329917f4b42d140b5742291",
+      "features": [
+        "embedded_file",
+        "nested_pdf"
+      ]
+    },
+    {
+      "file": "px11_combined.pdf",
+      "description": "All feature classes combined in one document.",
+      "size_bytes": 2309,
+      "sha256": "e8a09c2e4d6ba782cf494b5da041435d5bc1a3db37b87367e0f559ccf6a95941",
+      "features": [
+        "attachment_annotation",
+        "embedded_file",
+        "form",
+        "gotor",
+        "javascript",
+        "launch",
+        "openaction",
+        "uri"
+      ]
+    }
+  ]
+}

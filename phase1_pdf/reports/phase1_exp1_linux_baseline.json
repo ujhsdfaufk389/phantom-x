@@ -1,0 +1,2287 @@
+{
+  "schema": "phantom-x.phase1.pdf-inspection-batch/1.0",
+  "tool": "pdf_inspector.py",
+  "generated_utc": "2026-11-10T21:10:31.722740+00:00",
+  "count": 12,
+  "reports": [
+    {
+      "schema": "phantom-x.phase1.pdf-inspection/1.0",
+      "tool": "pdf_inspector.py",
+      "generated_utc": "2026-11-10T21:10:31.717318+00:00",
+      "analysis_mode": "static-structure",
+      "file": {
+        "path": "/home/syco/phantom-x/phase1_pdf/samples/px01_clean_baseline.pdf",
+        "size_bytes": 876,
+        "sha256": "851fc503b6a210442a357f07703d15633f28daea729126b17e0f14576ee1f6e8",
+        "md5": "6b34372610ae9fa1586b71e0c5934960",
+        "pdf_version": "1.7",
+        "encrypted": false,
+        "page_count": 1,
+        "object_count": 6,
+        "xref_type": "table",
+        "streams_seen": 1,
+        "streams_decoded": 1
+      },
+      "risk": {
+        "score": 0,
+        "band": "none",
+        "severity_counts": {
+          "info": 1
+        },
+        "interpretation": "Score reflects the PRESENCE of risky document features. It is not an execution verdict and not a malware verdict."
+      },
+      "summary": {
+        "actions": 0,
+        "javascript_entries": 0,
+        "embedded_files": 0,
+        "external_references": 0,
+        "annotations": 0,
+        "form_fields": 0,
+        "strings_of_interest": 0
+      },
+      "actions": [],
+      "javascript": [],
+      "embedded_files": [],
+      "external_references": [],
+      "annotations": [],
+      "form_fields": [],
+      "strings_of_interest": [],
+      "findings": [
+        {
+          "id": "PX1-000",
+          "category": "metadata",
+          "severity": "info",
+          "title": "Document identity",
+          "location": "file",
+          "detail": "Hashes and container metadata for the analysed file.",
+          "evidence": {
+            "path": "/home/syco/phantom-x/phase1_pdf/samples/px01_clean_baseline.pdf",
+            "size_bytes": 876,
+            "sha256": "851fc503b6a210442a357f07703d15633f28daea729126b17e0f14576ee1f6e8",
+            "md5": "6b34372610ae9fa1586b71e0c5934960",
+            "pdf_version": "1.7",
+            "encrypted": false,
+            "page_count": 1,
+            "object_count": 6,
+            "xref_type": "table"
+          },
+          "iocs": {
+            "sha256": "851fc503b6a210442a357f07703d15633f28daea729126b17e0f14576ee1f6e8",
+            "md5": "6b34372610ae9fa1586b71e0c5934960"
+          }
+        }
+      ],
+      "parser_warnings": []
+    },
+    {
+      "schema": "phantom-x.phase1.pdf-inspection/1.0",
+      "tool": "pdf_inspector.py",
+      "generated_utc": "2026-11-10T21:10:31.718012+00:00",
+      "analysis_mode": "static-structure",
+      "file": {
+        "path": "/home/syco/phantom-x/phase1_pdf/samples/px02_embedded_text.pdf",
+        "size_bytes": 1448,
+        "sha256": "63c8ccc119fa9b93d791dd880f29d5fe659fce72a44ae1c0bbc05c24c9485f61",
+        "md5": "4aa69e20592173aaad36681452ce323d",
+        "pdf_version": "1.7",
+        "encrypted": false,
+        "page_count": 1,
+        "object_count": 9,
+        "xref_type": "table",
+        "streams_seen": 2,
+        "streams_decoded": 1
+      },
+      "risk": {
+        "score": 24,
+        "band": "medium",
+        "severity_counts": {
+          "info": 2,
+          "medium": 1,
+          "high": 1
+        },
+        "interpretation": "Score reflects the PRESENCE of risky document features. It is not an execution verdict and not a malware verdict."
+      },
+      "summary": {
+        "actions": 0,
+        "javascript_entries": 0,
+        "embedded_files": 1,
+        "external_references": 0,
+        "annotations": 1,
+        "form_fields": 0,
+        "strings_of_interest": 0
+      },
+      "actions": [],
+      "javascript": [],
+      "embedded_files": [
+        {
+          "location": "page[0]/Annots[0]/FileAttachment",
+          "also_referenced_at": [
+            "obj 1"
+          ],
+          "embedded_object_num": 1,
+          "name_path": [
+            "px_benign_attachment.txt"
+          ],
+          "filename": "px_benign_attachment.txt",
+          "embedded_object": null,
+          "declared_size": 182,
+          "encoded_size": 144,
+          "decoded_size": 182,
+          "size_matches_declared": true,
+          "filters": [
+            "FlateDecode"
+          ],
+          "subtype": "text#2Fplain",
+          "checksum": null,
+          "filespec": {
+            "Type": "/Filespec",
+            "F": "px_benign_attachment.txt",
+            "UF": "px_benign_attachment.txt",
+            "EF": {
+              "F": "Ref(1 0 R)"
+            },
+            "Desc": "PHANTOM-X benign embedded text attachment"
+          },
+          "params": {
+            "Size": 182
+          },
+          "sha256": "8e2de920a73b18890926dde66532571fc083af655ad461bf08b062ee8bc6fbe2",
+          "md5": "d729daec79c14bf4b9e8570a4fd984a4",
+          "magic": "5048414e544f4d2d",
+          "identified_type": "plain text",
+          "entropy": 4.382,
+          "is_ascii_text": true,
+          "extracted_to": "./quarantine/px_benign_attachment.txt"
+        }
+      ],
+      "external_references": [],
+      "annotations": [
+        {
+          "location": "page[0]/Annots[0]",
+          "subtype": "FileAttachment",
+          "flags": null,
+          "contents": "PHANTOM-X benign attachment",
+          "name": "",
+          "has_action": false
+        }
+      ],
+      "form_fields": [],
+      "strings_of_interest": [],
+      "findings": [
+        {
+          "id": "PX1-040",
+          "category": "embedded-file",
+          "severity": "high",
+          "title": "File attachment annotation",
+          "location": "page[0]/Annots[0]",
+          "detail": "An embedded file is attached to this page. A reader may extract and/or open it.",
+          "evidence": {
+            "annotation": {
+              "location": "page[0]/Annots[0]",
+              "subtype": "FileAttachment",
+              "flags": null,
+              "contents": "PHANTOM-X benign attachment",
+              "name": "",
+              "has_action": false
+            },
+            "filespec": {
+              "Type": "/Filespec",
+              "F": "px_benign_attachment.txt",
+              "UF": "px_benign_attachment.txt",
+              "EF": {
+                "F": "Ref(1 0 R)"
+              },
+              "Desc": "PHANTOM-X benign embedded text attachment"
+            }
+          },
+          "iocs": {
+            "F": "px_benign_attachment.txt",
+            "UF": "px_benign_attachment.txt"
+          }
+        },
+        {
+          "id": "PX1-060",
+          "category": "embedded-file",
+          "severity": "medium",
+          "title": "Embedded file present",
+          "location": "page[0]/Annots[0]/FileAttachment",
+          "detail": "Document carries an embedded file. Extraction and opening are separate events; a reader may not offer to open it without user action.",
+          "evidence": {
+            "location": "page[0]/Annots[0]/FileAttachment",
+            "also_referenced_at": [
+              "obj 1"
+            ],
+            "embedded_object_num": 1,
+            "name_path": [
+              "px_benign_attachment.txt"
+            ],
+            "filename": "px_benign_attachment.txt",
+            "embedded_object": null,
+            "declared_size": 182,
+            "encoded_size": 144,
+            "decoded_size": 182,
+            "size_matches_declared": true,
+            "filters": [
+              "FlateDecode"
+            ],
+            "subtype": "text#2Fplain",
+            "checksum": null,
+            "filespec": {
+              "Type": "/Filespec",
+              "F": "px_benign_attachment.txt",
+              "UF": "px_benign_attachment.txt",
+              "EF": {
+                "F": "Ref(1 0 R)"
+              },
+              "Desc": "PHANTOM-X benign embedded text attachment"
+            },
+            "params": {
+              "Size": 182
+            },
+            "sha256": "8e2de920a73b18890926dde66532571fc083af655ad461bf08b062ee8bc6fbe2",
+            "md5": "d729daec79c14bf4b9e8570a4fd984a4",
+            "magic": "5048414e544f4d2d",
+            "identified_type": "plain text",
+            "entropy": 4.382,
+            "is_ascii_text": true,
+            "extracted_to": "./quarantine/px_benign_attachment.txt"
+          },
+          "iocs": {
+            "sha256": "8e2de920a73b18890926dde66532571fc083af655ad461bf08b062ee8bc6fbe2",
+            "filename": "px_benign_attachment.txt",
+            "identified_type": "plain text"
+          }
+        },
+        {
+          "id": "PX1-000",
+          "category": "metadata",
+          "severity": "info",
+          "title": "Document identity",
+          "location": "file",
+          "detail": "Hashes and container metadata for the analysed file.",
+          "evidence": {
+            "path": "/home/syco/phantom-x/phase1_pdf/samples/px02_embedded_text.pdf",
+            "size_bytes": 1448,
+            "sha256": "63c8ccc119fa9b93d791dd880f29d5fe659fce72a44ae1c0bbc05c24c9485f61",
+            "md5": "4aa69e20592173aaad36681452ce323d",
+            "pdf_version": "1.7",
+            "encrypted": false,
+            "page_count": 1,
+            "object_count": 9,
+            "xref_type": "table"
+          },
+          "iocs": {
+            "sha256": "63c8ccc119fa9b93d791dd880f29d5fe659fce72a44ae1c0bbc05c24c9485f61",
+            "md5": "4aa69e20592173aaad36681452ce323d"
+          }
+        },
+        {
+          "id": "PX1-021",
+          "category": "name-tree",
+          "severity": "info",
+          "title": "Name tree entry: px_benign_attachment.txt",
+          "location": "catalog/Names/EmbeddedFiles/Names[0]",
+          "detail": "Dictionary entry in a name tree.",
+          "evidence": {
+            "dict": {
+              "Type": "/Filespec",
+              "F": "px_benign_attachment.txt",
+              "UF": "px_benign_attachment.txt",
+              "EF": {
+                "F": "Ref(1 0 R)"
+              },
+              "Desc": "PHANTOM-X benign embedded text attachment"
+            }
+          },
+          "iocs": {}
+        }
+      ],
+      "parser_warnings": []
+    },
+    {
+      "schema": "phantom-x.phase1.pdf-inspection/1.0",
+      "tool": "pdf_inspector.py",
+      "generated_utc": "2026-11-10T21:10:31.718500+00:00",
+      "analysis_mode": "static-structure",
+      "file": {
+        "path": "/home/syco/phantom-x/phase1_pdf/samples/px03_embedded_exe_canary.pdf",
+        "size_bytes": 1526,
+        "sha256": "2b78fa608c86e852e845854356a30378c6992cd80dec324f78d91f9011dde48d",
+        "md5": "b15f79934809cba9afa0622d21665f89",
+        "pdf_version": "1.7",
+        "encrypted": false,
+        "page_count": 1,
+        "object_count": 8,
+        "xref_type": "table",
+        "streams_seen": 2,
+        "streams_decoded": 1
+      },
+      "risk": {
+        "score": 6,
+        "band": "low",
+        "severity_counts": {
+          "info": 2,
+          "medium": 1
+        },
+        "interpretation": "Score reflects the PRESENCE of risky document features. It is not an execution verdict and not a malware verdict."
+      },
+      "summary": {
+        "actions": 0,
+        "javascript_entries": 0,
+        "embedded_files": 1,
+        "external_references": 0,
+        "annotations": 0,
+        "form_fields": 0,
+        "strings_of_interest": 0
+      },
+      "actions": [],
+      "javascript": [],
+      "embedded_files": [
+        {
+          "location": "obj 1",
+          "also_referenced_at": [],
+          "embedded_object_num": 1,
+          "name_path": [
+            "px_detection_canary.bin"
+          ],
+          "filename": "px_detection_canary.bin",
+          "embedded_object": null,
+          "declared_size": 507,
+          "encoded_size": 361,
+          "decoded_size": 507,
+          "size_matches_declared": true,
+          "filters": [
+            "FlateDecode"
+          ],
+          "subtype": "application#2Foctet-stream",
+          "checksum": null,
+          "filespec": {
+            "Type": "/Filespec",
+            "F": "px_detection_canary.bin",
+            "UF": "px_detection_canary.bin",
+            "EF": {
+              "F": "Ref(1 0 R)"
+            },
+            "Desc": "PHANTOM-X inert detection canary (not an executable)"
+          },
+          "params": {
+            "Size": 507
+          },
+          "sha256": "bd9f1897e62c8fa25c7e6bd1a9c4d2ed15e69ce73418d46bd09df02251726d32",
+          "md5": "a533e3bc796dfcedeabba765d1aeaeda",
+          "magic": "4d5a9000030a5048",
+          "identified_type": "MZ-prefixed plain text (NOT a PE image)",
+          "entropy": 4.963,
+          "is_ascii_text": false,
+          "extracted_to": "./quarantine/px_detection_canary.bin"
+        }
+      ],
+      "external_references": [],
+      "annotations": [],
+      "form_fields": [],
+      "strings_of_interest": [],
+      "findings": [
+        {
+          "id": "PX1-060",
+          "category": "embedded-file",
+          "severity": "medium",
+          "title": "Embedded file present",
+          "location": "obj 1",
+          "detail": "Document carries an embedded file. Extraction and opening are separate events; a reader may not offer to open it without user action.",
+          "evidence": {
+            "location": "obj 1",
+            "also_referenced_at": [],
+            "embedded_object_num": 1,
+            "name_path": [
+              "px_detection_canary.bin"
+            ],
+            "filename": "px_detection_canary.bin",
+            "embedded_object": null,
+            "declared_size": 507,
+            "encoded_size": 361,
+            "decoded_size": 507,
+            "size_matches_declared": true,
+            "filters": [
+              "FlateDecode"
+            ],
+            "subtype": "application#2Foctet-stream",
+            "checksum": null,
+            "filespec": {
+              "Type": "/Filespec",
+              "F": "px_detection_canary.bin",
+              "UF": "px_detection_canary.bin",
+              "EF": {
+                "F": "Ref(1 0 R)"
+              },
+              "Desc": "PHANTOM-X inert detection canary (not an executable)"
+            },
+            "params": {
+              "Size": 507
+            },
+            "sha256": "bd9f1897e62c8fa25c7e6bd1a9c4d2ed15e69ce73418d46bd09df02251726d32",
+            "md5": "a533e3bc796dfcedeabba765d1aeaeda",
+            "magic": "4d5a9000030a5048",
+            "identified_type": "MZ-prefixed plain text (NOT a PE image)",
+            "entropy": 4.963,
+            "is_ascii_text": false,
+            "extracted_to": "./quarantine/px_detection_canary.bin"
+          },
+          "iocs": {
+            "sha256": "bd9f1897e62c8fa25c7e6bd1a9c4d2ed15e69ce73418d46bd09df02251726d32",
+            "filename": "px_detection_canary.bin",
+            "identified_type": "MZ-prefixed plain text (NOT a PE image)"
+          }
+        },
+        {
+          "id": "PX1-000",
+          "category": "metadata",
+          "severity": "info",
+          "title": "Document identity",
+          "location": "file",
+          "detail": "Hashes and container metadata for the analysed file.",
+          "evidence": {
+            "path": "/home/syco/phantom-x/phase1_pdf/samples/px03_embedded_exe_canary.pdf",
+            "size_bytes": 1526,
+            "sha256": "2b78fa608c86e852e845854356a30378c6992cd80dec324f78d91f9011dde48d",
+            "md5": "b15f79934809cba9afa0622d21665f89",
+            "pdf_version": "1.7",
+            "encrypted": false,
+            "page_count": 1,
+            "object_count": 8,
+            "xref_type": "table"
+          },
+          "iocs": {
+            "sha256": "2b78fa608c86e852e845854356a30378c6992cd80dec324f78d91f9011dde48d",
+            "md5": "b15f79934809cba9afa0622d21665f89"
+          }
+        },
+        {
+          "id": "PX1-021",
+          "category": "name-tree",
+          "severity": "info",
+          "title": "Name tree entry: px_detection_canary.bin",
+          "location": "catalog/Names/EmbeddedFiles/Names[0]",
+          "detail": "Dictionary entry in a name tree.",
+          "evidence": {
+            "dict": {
+              "Type": "/Filespec",
+              "F": "px_detection_canary.bin",
+              "UF": "px_detection_canary.bin",
+              "EF": {
+                "F": "Ref(1 0 R)"
+              },
+              "Desc": "PHANTOM-X inert detection canary (not an executable)"
+            }
+          },
+          "iocs": {}
+        }
+      ],
+      "parser_warnings": []
+    },
+    {
+      "schema": "phantom-x.phase1.pdf-inspection/1.0",
+      "tool": "pdf_inspector.py",
+      "generated_utc": "2026-11-10T21:10:31.718872+00:00",
+      "analysis_mode": "static-structure",
+      "file": {
+        "path": "/home/syco/phantom-x/phase1_pdf/samples/px04_javascript.pdf",
+        "size_bytes": 1445,
+        "sha256": "e83e1a002199a214b4a530e724dc1c9dadcb6b4ed5f16c5160693e20f4478b40",
+        "md5": "7e63edb98bbb43b3214b7625fba7e48b",
+        "pdf_version": "1.7",
+        "encrypted": false,
+        "page_count": 1,
+        "object_count": 7,
+        "xref_type": "table",
+        "streams_seen": 1,
+        "streams_decoded": 1
+      },
+      "risk": {
+        "score": 18,
+        "band": "low",
+        "severity_counts": {
+          "info": 1,
+          "high": 1
+        },
+        "interpretation": "Score reflects the PRESENCE of risky document features. It is not an execution verdict and not a malware verdict."
+      },
+      "summary": {
+        "actions": 1,
+        "javascript_entries": 1,
+        "embedded_files": 0,
+        "external_references": 0,
+        "annotations": 0,
+        "form_fields": 0,
+        "strings_of_interest": 0
+      },
+      "actions": [
+        {
+          "location": "obj 1",
+          "also_referenced_at": [],
+          "objnum": 1,
+          "action_type": "JavaScript",
+          "severity": "high",
+          "requires_interaction": false,
+          "parameters": {
+            "S": "/JavaScript",
+            "JS": "<bytes len=296 sha256=a5547146dfcfd0fd>"
+          }
+        }
+      ],
+      "javascript": [
+        {
+          "location": "catalog/Names/JavaScript/Names[0]",
+          "also_referenced_at": [
+            "obj 1"
+          ],
+          "name_path": [
+            "px_js_probe"
+          ],
+          "objnum": 1,
+          "script_length": 296,
+          "script_sha256": "a5547146dfcfd0fd55ca981c9463db85a5210cbda768d078c4d5d948acf99a5a",
+          "script_preview": "// PHANTOM-X benign JavaScript probe\n// Scope: app.alert only. No network, no filesystem, no exec.\nvar msg = 'PHANTOM-X JS probe: document script executed.';\ntry { app.alert(msg); } catch (e) { /* reader refused scripting */ }\ntry { this.getField('probe_field').value = 'js-ran'; } catch (e2) {}\n"
+        }
+      ],
+      "embedded_files": [],
+      "external_references": [],
+      "annotations": [],
+      "form_fields": [],
+      "strings_of_interest": [],
+      "findings": [
+        {
+          "id": "PX1-070",
+          "category": "javascript",
+          "severity": "high",
+          "title": "JavaScript in document",
+          "location": "catalog/Names/JavaScript/Names[0]",
+          "detail": "Document contains JavaScript for a reader scripting engine. Execution depends on the reader's scripting policy, sandbox and any user prompt.",
+          "evidence": {
+            "location": "catalog/Names/JavaScript/Names[0]",
+            "also_referenced_at": [
+              "obj 1"
+            ],
+            "name_path": [
+              "px_js_probe"
+            ],
+            "objnum": 1,
+            "script_length": 296,
+            "script_sha256": "a5547146dfcfd0fd55ca981c9463db85a5210cbda768d078c4d5d948acf99a5a",
+            "script_preview": "// PHANTOM-X benign JavaScript probe\n// Scope: app.alert only. No network, no filesystem, no exec.\nvar msg = 'PHANTOM-X JS probe: document script executed.';\ntry { app.alert(msg); } catch (e) { /* reader refused scripting */ }\ntry { this.getField('probe_field').value = 'js-ran'; } catch (e2) {}\n"
+          },
+          "iocs": {}
+        },
+        {
+          "id": "PX1-000",
+          "category": "metadata",
+          "severity": "info",
+          "title": "Document identity",
+          "location": "file",
+          "detail": "Hashes and container metadata for the analysed file.",
+          "evidence": {
+            "path": "/home/syco/phantom-x/phase1_pdf/samples/px04_javascript.pdf",
+            "size_bytes": 1445,
+            "sha256": "e83e1a002199a214b4a530e724dc1c9dadcb6b4ed5f16c5160693e20f4478b40",
+            "md5": "7e63edb98bbb43b3214b7625fba7e48b",
+            "pdf_version": "1.7",
+            "encrypted": false,
+            "page_count": 1,
+            "object_count": 7,
+            "xref_type": "table"
+          },
+          "iocs": {
+            "sha256": "e83e1a002199a214b4a530e724dc1c9dadcb6b4ed5f16c5160693e20f4478b40",
+            "md5": "7e63edb98bbb43b3214b7625fba7e48b"
+          }
+        }
+      ],
+      "parser_warnings": []
+    },
+    {
+      "schema": "phantom-x.phase1.pdf-inspection/1.0",
+      "tool": "pdf_inspector.py",
+      "generated_utc": "2026-11-10T21:10:31.719158+00:00",
+      "analysis_mode": "static-structure",
+      "file": {
+        "path": "/home/syco/phantom-x/phase1_pdf/samples/px05_launch_action.pdf",
+        "size_bytes": 940,
+        "sha256": "2cab991413c21d222e9b9ba8bd695077aa93f4ef61c3a0a2230f54feb7d260d1",
+        "md5": "f5f58227b02bd90f8932a96248d241e7",
+        "pdf_version": "1.7",
+        "encrypted": false,
+        "page_count": 1,
+        "object_count": 7,
+        "xref_type": "table",
+        "streams_seen": 1,
+        "streams_decoded": 1
+      },
+      "risk": {
+        "score": 20,
+        "band": "medium",
+        "severity_counts": {
+          "info": 1,
+          "high": 1,
+          "low": 1
+        },
+        "interpretation": "Score reflects the PRESENCE of risky document features. It is not an execution verdict and not a malware verdict."
+      },
+      "summary": {
+        "actions": 1,
+        "javascript_entries": 0,
+        "embedded_files": 0,
+        "external_references": 1,
+        "annotations": 1,
+        "form_fields": 0,
+        "strings_of_interest": 0
+      },
+      "actions": [
+        {
+          "location": "page[0]/Annots[0]/A",
+          "also_referenced_at": [
+            "obj 1"
+          ],
+          "objnum": 1,
+          "action_type": "Launch",
+          "severity": "high",
+          "requires_interaction": true,
+          "parameters": {
+            "S": "/Launch",
+            "F": "px_harmless_target.txt",
+            "NewWindow": true
+          }
+        }
+      ],
+      "javascript": [],
+      "embedded_files": [],
+      "external_references": [
+        {
+          "location": "page[0]/Annots[0]/A",
+          "action_type": "Launch",
+          "parameter": "F",
+          "value": "px_harmless_target.txt",
+          "kind": "relative-file"
+        }
+      ],
+      "annotations": [
+        {
+          "location": "page[0]/Annots[0]",
+          "subtype": "Link",
+          "flags": null,
+          "contents": "PHANTOM-X launch action probe",
+          "name": "",
+          "has_action": true
+        }
+      ],
+      "form_fields": [],
+      "strings_of_interest": [],
+      "findings": [
+        {
+          "id": "PX1-041",
+          "category": "annotation-action",
+          "severity": "high",
+          "title": "Annotation action (Launch action)",
+          "location": "page[0]/Annots[0]/A",
+          "detail": "Instructs the reader to launch an external application or file.",
+          "evidence": {
+            "action": {
+              "S": "/Launch",
+              "F": "px_harmless_target.txt",
+              "NewWindow": true
+            }
+          },
+          "iocs": {
+            "F": "px_harmless_target.txt"
+          }
+        },
+        {
+          "id": "PX1-080",
+          "category": "external-reference",
+          "severity": "low",
+          "title": "External reference in Launch (relative-file)",
+          "location": "page[0]/Annots[0]/A",
+          "detail": "Action points at a resource outside the document. A reader may resolve, fetch, or launch it -- subject to reader policy.",
+          "evidence": {
+            "location": "page[0]/Annots[0]/A",
+            "action_type": "Launch",
+            "parameter": "F",
+            "value": "px_harmless_target.txt",
+            "kind": "relative-file"
+          },
+          "iocs": {
+            "url": "px_harmless_target.txt",
+            "kind": "relative-file"
+          }
+        },
+        {
+          "id": "PX1-000",
+          "category": "metadata",
+          "severity": "info",
+          "title": "Document identity",
+          "location": "file",
+          "detail": "Hashes and container metadata for the analysed file.",
+          "evidence": {
+            "path": "/home/syco/phantom-x/phase1_pdf/samples/px05_launch_action.pdf",
+            "size_bytes": 940,
+            "sha256": "2cab991413c21d222e9b9ba8bd695077aa93f4ef61c3a0a2230f54feb7d260d1",
+            "md5": "f5f58227b02bd90f8932a96248d241e7",
+            "pdf_version": "1.7",
+            "encrypted": false,
+            "page_count": 1,
+            "object_count": 7,
+            "xref_type": "table"
+          },
+          "iocs": {
+            "sha256": "2cab991413c21d222e9b9ba8bd695077aa93f4ef61c3a0a2230f54feb7d260d1",
+            "md5": "f5f58227b02bd90f8932a96248d241e7"
+          }
+        }
+      ],
+      "parser_warnings": []
+    },
+    {
+      "schema": "phantom-x.phase1.pdf-inspection/1.0",
+      "tool": "pdf_inspector.py",
+      "generated_utc": "2026-11-10T21:10:31.719417+00:00",
+      "analysis_mode": "static-structure",
+      "file": {
+        "path": "/home/syco/phantom-x/phase1_pdf/samples/px06_uri_action.pdf",
+        "size_bytes": 935,
+        "sha256": "f39f8cfbc1c328cc64fc9c1ac39880b317d82ff338820ed9dd323a1150f47ded",
+        "md5": "26b8f1d1a58c0102ae6a0fc30a0e221c",
+        "pdf_version": "1.7",
+        "encrypted": false,
+        "page_count": 1,
+        "object_count": 7,
+        "xref_type": "table",
+        "streams_seen": 1,
+        "streams_decoded": 1
+      },
+      "risk": {
+        "score": 12,
+        "band": "low",
+        "severity_counts": {
+          "info": 1,
+          "medium": 2
+        },
+        "interpretation": "Score reflects the PRESENCE of risky document features. It is not an execution verdict and not a malware verdict."
+      },
+      "summary": {
+        "actions": 1,
+        "javascript_entries": 0,
+        "embedded_files": 0,
+        "external_references": 1,
+        "annotations": 1,
+        "form_fields": 0,
+        "strings_of_interest": 0
+      },
+      "actions": [
+        {
+          "location": "page[0]/Annots[0]/A",
+          "also_referenced_at": [
+            "obj 1"
+          ],
+          "objnum": 1,
+          "action_type": "URI",
+          "severity": "medium",
+          "requires_interaction": true,
+          "parameters": {
+            "S": "/URI",
+            "URI": "https://example.com/phantom-x-canary"
+          }
+        }
+      ],
+      "javascript": [],
+      "embedded_files": [],
+      "external_references": [
+        {
+          "location": "page[0]/Annots[0]/A",
+          "action_type": "URI",
+          "parameter": "URI",
+          "value": "https://example.com/phantom-x-canary",
+          "kind": "url"
+        }
+      ],
+      "annotations": [
+        {
+          "location": "page[0]/Annots[0]",
+          "subtype": "Link",
+          "flags": null,
+          "contents": "PHANTOM-X URI action probe",
+          "name": "",
+          "has_action": true
+        }
+      ],
+      "form_fields": [],
+      "strings_of_interest": [],
+      "findings": [
+        {
+          "id": "PX1-041",
+          "category": "annotation-action",
+          "severity": "medium",
+          "title": "Annotation action (URI action)",
+          "location": "page[0]/Annots[0]/A",
+          "detail": "Instructs the reader to open a network resource (browser/handler).",
+          "evidence": {
+            "action": {
+              "S": "/URI",
+              "URI": "https://example.com/phantom-x-canary"
+            }
+          },
+          "iocs": {
+            "URI": "https://example.com/phantom-x-canary"
+          }
+        },
+        {
+          "id": "PX1-080",
+          "category": "external-reference",
+          "severity": "medium",
+          "title": "External reference in URI (url)",
+          "location": "page[0]/Annots[0]/A",
+          "detail": "Action points at a resource outside the document. A reader may resolve, fetch, or launch it -- subject to reader policy.",
+          "evidence": {
+            "location": "page[0]/Annots[0]/A",
+            "action_type": "URI",
+            "parameter": "URI",
+            "value": "https://example.com/phantom-x-canary",
+            "kind": "url"
+          },
+          "iocs": {
+            "url": "https://example.com/phantom-x-canary",
+            "kind": "url"
+          }
+        },
+        {
+          "id": "PX1-000",
+          "category": "metadata",
+          "severity": "info",
+          "title": "Document identity",
+          "location": "file",
+          "detail": "Hashes and container metadata for the analysed file.",
+          "evidence": {
+            "path": "/home/syco/phantom-x/phase1_pdf/samples/px06_uri_action.pdf",
+            "size_bytes": 935,
+            "sha256": "f39f8cfbc1c328cc64fc9c1ac39880b317d82ff338820ed9dd323a1150f47ded",
+            "md5": "26b8f1d1a58c0102ae6a0fc30a0e221c",
+            "pdf_version": "1.7",
+            "encrypted": false,
+            "page_count": 1,
+            "object_count": 7,
+            "xref_type": "table"
+          },
+          "iocs": {
+            "sha256": "f39f8cfbc1c328cc64fc9c1ac39880b317d82ff338820ed9dd323a1150f47ded",
+            "md5": "26b8f1d1a58c0102ae6a0fc30a0e221c"
+          }
+        }
+      ],
+      "parser_warnings": []
+    },
+    {
+      "schema": "phantom-x.phase1.pdf-inspection/1.0",
+      "tool": "pdf_inspector.py",
+      "generated_utc": "2026-11-10T21:10:31.719668+00:00",
+      "analysis_mode": "static-structure",
+      "file": {
+        "path": "/home/syco/phantom-x/phase1_pdf/samples/px07_openaction_js.pdf",
+        "size_bytes": 1009,
+        "sha256": "16a14bcbc9b864061494ba7aacfec274e446773caa63567669c38c4a9ed52896",
+        "md5": "895b9b26b468980bc30386ad244fa8bf",
+        "pdf_version": "1.7",
+        "encrypted": false,
+        "page_count": 1,
+        "object_count": 6,
+        "xref_type": "table",
+        "streams_seen": 1,
+        "streams_decoded": 1
+      },
+      "risk": {
+        "score": 36,
+        "band": "medium",
+        "severity_counts": {
+          "info": 1,
+          "high": 2
+        },
+        "interpretation": "Score reflects the PRESENCE of risky document features. It is not an execution verdict and not a malware verdict."
+      },
+      "summary": {
+        "actions": 1,
+        "javascript_entries": 1,
+        "embedded_files": 0,
+        "external_references": 0,
+        "annotations": 0,
+        "form_fields": 0,
+        "strings_of_interest": 0
+      },
+      "actions": [
+        {
+          "location": "catalog/OpenAction",
+          "also_referenced_at": [
+            "obj 1"
+          ],
+          "objnum": 1,
+          "action_type": "JavaScript",
+          "severity": "high",
+          "requires_interaction": false,
+          "parameters": {
+            "S": "/JavaScript",
+            "JS": "// PHANTOM-X benign OpenAction JavaScript probe\ntry { app.alert('PHANTOM-X: OpenAction JS executed.'); } catch (e) {}\n"
+          }
+        }
+      ],
+      "javascript": [
+        {
+          "location": "obj 1",
+          "also_referenced_at": [],
+          "name_path": [
+            "obj 1"
+          ],
+          "objnum": 1,
+          "script_length": 118,
+          "script_sha256": "87d79a8bcf536f1accd5a3dfa8bc54e7ae34df09f92d2e51ccca43c3a4713911",
+          "script_preview": "// PHANTOM-X benign OpenAction JavaScript probe\ntry { app.alert('PHANTOM-X: OpenAction JS executed.'); } catch (e) {}\n"
+        }
+      ],
+      "embedded_files": [],
+      "external_references": [],
+      "annotations": [],
+      "form_fields": [],
+      "strings_of_interest": [],
+      "findings": [
+        {
+          "id": "PX1-010",
+          "category": "open-action",
+          "severity": "high",
+          "title": "Catalog /OpenAction (JavaScript)",
+          "location": "catalog/OpenAction",
+          "detail": "Executes script in the reader's scripting engine.",
+          "evidence": {
+            "action_type": "JavaScript",
+            "action_dict": {
+              "S": "/JavaScript",
+              "JS": "// PHANTOM-X benign OpenAction JavaScript probe\ntry { app.alert('PHANTOM-X: OpenAction JS executed.'); } catch (e) {}\n"
+            }
+          },
+          "iocs": {}
+        },
+        {
+          "id": "PX1-070",
+          "category": "javascript",
+          "severity": "high",
+          "title": "JavaScript in document",
+          "location": "obj 1",
+          "detail": "Document contains JavaScript for a reader scripting engine. Execution depends on the reader's scripting policy, sandbox and any user prompt.",
+          "evidence": {
+            "location": "obj 1",
+            "also_referenced_at": [],
+            "name_path": [
+              "obj 1"
+            ],
+            "objnum": 1,
+            "script_length": 118,
+            "script_sha256": "87d79a8bcf536f1accd5a3dfa8bc54e7ae34df09f92d2e51ccca43c3a4713911",
+            "script_preview": "// PHANTOM-X benign OpenAction JavaScript probe\ntry { app.alert('PHANTOM-X: OpenAction JS executed.'); } catch (e) {}\n"
+          },
+          "iocs": {}
+        },
+        {
+          "id": "PX1-000",
+          "category": "metadata",
+          "severity": "info",
+          "title": "Document identity",
+          "location": "file",
+          "detail": "Hashes and container metadata for the analysed file.",
+          "evidence": {
+            "path": "/home/syco/phantom-x/phase1_pdf/samples/px07_openaction_js.pdf",
+            "size_bytes": 1009,
+            "sha256": "16a14bcbc9b864061494ba7aacfec274e446773caa63567669c38c4a9ed52896",
+            "md5": "895b9b26b468980bc30386ad244fa8bf",
+            "pdf_version": "1.7",
+            "encrypted": false,
+            "page_count": 1,
+            "object_count": 6,
+            "xref_type": "table"
+          },
+          "iocs": {
+            "sha256": "16a14bcbc9b864061494ba7aacfec274e446773caa63567669c38c4a9ed52896",
+            "md5": "895b9b26b468980bc30386ad244fa8bf"
+          }
+        }
+      ],
+      "parser_warnings": []
+    },
+    {
+      "schema": "phantom-x.phase1.pdf-inspection/1.0",
+      "tool": "pdf_inspector.py",
+      "generated_utc": "2026-11-10T21:10:31.719937+00:00",
+      "analysis_mode": "static-structure",
+      "file": {
+        "path": "/home/syco/phantom-x/phase1_pdf/samples/px08_gotor_remote.pdf",
+        "size_bytes": 942,
+        "sha256": "91347c9f6a253fd3c5c7db642fa93c0d17a5c52773d8dd13b86f7ca323688a25",
+        "md5": "e8df62987ef6b3ccab807c6d128dd9f8",
+        "pdf_version": "1.7",
+        "encrypted": false,
+        "page_count": 1,
+        "object_count": 7,
+        "xref_type": "table",
+        "streams_seen": 1,
+        "streams_decoded": 1
+      },
+      "risk": {
+        "score": 8,
+        "band": "low",
+        "severity_counts": {
+          "info": 1,
+          "medium": 1,
+          "low": 1
+        },
+        "interpretation": "Score reflects the PRESENCE of risky document features. It is not an execution verdict and not a malware verdict."
+      },
+      "summary": {
+        "actions": 1,
+        "javascript_entries": 0,
+        "embedded_files": 0,
+        "external_references": 1,
+        "annotations": 1,
+        "form_fields": 0,
+        "strings_of_interest": 0
+      },
+      "actions": [
+        {
+          "location": "page[0]/Annots[0]/A",
+          "also_referenced_at": [
+            "obj 1"
+          ],
+          "objnum": 1,
+          "action_type": "GoToR",
+          "severity": "medium",
+          "requires_interaction": true,
+          "parameters": {
+            "S": "/GoToR",
+            "F": "px_external_target.pdf",
+            "D": [
+              0,
+              "/Fit"
+            ],
+            "NewWindow": true
+          }
+        }
+      ],
+      "javascript": [],
+      "embedded_files": [],
+      "external_references": [
+        {
+          "location": "page[0]/Annots[0]/A",
+          "action_type": "GoToR",
+          "parameter": "F",
+          "value": "px_external_target.pdf",
+          "kind": "relative-file"
+        }
+      ],
+      "annotations": [
+        {
+          "location": "page[0]/Annots[0]",
+          "subtype": "Link",
+          "flags": null,
+          "contents": "PHANTOM-X GoToR probe",
+          "name": "",
+          "has_action": true
+        }
+      ],
+      "form_fields": [],
+      "strings_of_interest": [],
+      "findings": [
+        {
+          "id": "PX1-041",
+          "category": "annotation-action",
+          "severity": "medium",
+          "title": "Annotation action (Remote GoTo action)",
+          "location": "page[0]/Annots[0]/A",
+          "detail": "Opens a different PDF file; may reference a local or remote path.",
+          "evidence": {
+            "action": {
+              "S": "/GoToR",
+              "F": "px_external_target.pdf",
+              "D": [
+                0,
+                "/Fit"
+              ],
+              "NewWindow": true
+            }
+          },
+          "iocs": {
+            "F": "px_external_target.pdf"
+          }
+        },
+        {
+          "id": "PX1-080",
+          "category": "external-reference",
+          "severity": "low",
+          "title": "External reference in GoToR (relative-file)",
+          "location": "page[0]/Annots[0]/A",
+          "detail": "Action points at a resource outside the document. A reader may resolve, fetch, or launch it -- subject to reader policy.",
+          "evidence": {
+            "location": "page[0]/Annots[0]/A",
+            "action_type": "GoToR",
+            "parameter": "F",
+            "value": "px_external_target.pdf",
+            "kind": "relative-file"
+          },
+          "iocs": {
+            "url": "px_external_target.pdf",
+            "kind": "relative-file"
+          }
+        },
+        {
+          "id": "PX1-000",
+          "category": "metadata",
+          "severity": "info",
+          "title": "Document identity",
+          "location": "file",
+          "detail": "Hashes and container metadata for the analysed file.",
+          "evidence": {
+            "path": "/home/syco/phantom-x/phase1_pdf/samples/px08_gotor_remote.pdf",
+            "size_bytes": 942,
+            "sha256": "91347c9f6a253fd3c5c7db642fa93c0d17a5c52773d8dd13b86f7ca323688a25",
+            "md5": "e8df62987ef6b3ccab807c6d128dd9f8",
+            "pdf_version": "1.7",
+            "encrypted": false,
+            "page_count": 1,
+            "object_count": 7,
+            "xref_type": "table"
+          },
+          "iocs": {
+            "sha256": "91347c9f6a253fd3c5c7db642fa93c0d17a5c52773d8dd13b86f7ca323688a25",
+            "md5": "e8df62987ef6b3ccab807c6d128dd9f8"
+          }
+        }
+      ],
+      "parser_warnings": []
+    },
+    {
+      "schema": "phantom-x.phase1.pdf-inspection/1.0",
+      "tool": "pdf_inspector.py",
+      "generated_utc": "2026-11-10T21:10:31.720282+00:00",
+      "analysis_mode": "static-structure",
+      "file": {
+        "path": "/home/syco/phantom-x/phase1_pdf/samples/px09_form_with_action.pdf",
+        "size_bytes": 1199,
+        "sha256": "656fa649797c4ecefeed8b67e73a0dfdaaf6775236330f770b235020739bcf87",
+        "md5": "ce3f580844a260aa7d3232bf869b221c",
+        "pdf_version": "1.7",
+        "encrypted": false,
+        "page_count": 1,
+        "object_count": 7,
+        "xref_type": "table",
+        "streams_seen": 1,
+        "streams_decoded": 1
+      },
+      "risk": {
+        "score": 56,
+        "band": "high",
+        "severity_counts": {
+          "info": 1,
+          "low": 1,
+          "high": 3
+        },
+        "interpretation": "Score reflects the PRESENCE of risky document features. It is not an execution verdict and not a malware verdict."
+      },
+      "summary": {
+        "actions": 1,
+        "javascript_entries": 1,
+        "embedded_files": 0,
+        "external_references": 0,
+        "annotations": 1,
+        "form_fields": 1,
+        "strings_of_interest": 0
+      },
+      "actions": [
+        {
+          "location": "AcroForm/Fields[0]/AA/F",
+          "also_referenced_at": [
+            "AcroForm/Fields[0]/AA/Fo",
+            "obj 1"
+          ],
+          "objnum": 1,
+          "action_type": "JavaScript",
+          "severity": "high",
+          "requires_interaction": false,
+          "parameters": {
+            "S": "/JavaScript",
+            "JS": "// PHANTOM-X benign form-field action probe\ntry { app.alert('PHANTOM-X: field JS action executed.'); } catch (e) {}\n"
+          }
+        }
+      ],
+      "javascript": [
+        {
+          "location": "obj 1",
+          "also_referenced_at": [],
+          "name_path": [
+            "obj 1"
+          ],
+          "objnum": 1,
+          "script_length": 116,
+          "script_sha256": "4317e68ff323947d4cefa4dd5ce8eceec7e6d2caf1c21054b901961b9cb78202",
+          "script_preview": "// PHANTOM-X benign form-field action probe\ntry { app.alert('PHANTOM-X: field JS action executed.'); } catch (e) {}\n"
+        }
+      ],
+      "embedded_files": [],
+      "external_references": [],
+      "annotations": [
+        {
+          "location": "page[0]/Annots[0]",
+          "subtype": "Widget",
+          "flags": null,
+          "contents": "",
+          "name": "",
+          "has_action": false
+        }
+      ],
+      "form_fields": [
+        {
+          "location": "AcroForm/Fields[0]",
+          "name": "probe_field",
+          "type": "Tx",
+          "flags": null,
+          "actions": [
+            {
+              "event": "F",
+              "action": {
+                "S": "/JavaScript",
+                "JS": "// PHANTOM-X benign form-field action probe\ntry { app.alert('PHANTOM-X: field JS action executed.'); } catch (e) {}\n"
+              }
+            },
+            {
+              "event": "Fo",
+              "action": {
+                "S": "/JavaScript",
+                "JS": "// PHANTOM-X benign form-field action probe\ntry { app.alert('PHANTOM-X: field JS action executed.'); } catch (e) {}\n"
+              }
+            }
+          ]
+        }
+      ],
+      "strings_of_interest": [],
+      "findings": [
+        {
+          "id": "PX1-050",
+          "category": "form-action",
+          "severity": "high",
+          "title": "Form field action: F",
+          "location": "AcroForm/Fields[0]/AA/F",
+          "detail": "A form field defines an event handler. Validate / Calculate / format handlers can run script.",
+          "evidence": {
+            "field": "probe_field",
+            "event": "F",
+            "action": {
+              "S": "/JavaScript",
+              "JS": "// PHANTOM-X benign form-field action probe\ntry { app.alert('PHANTOM-X: field JS action executed.'); } catch (e) {}\n"
+            }
+          },
+          "iocs": {}
+        },
+        {
+          "id": "PX1-050",
+          "category": "form-action",
+          "severity": "high",
+          "title": "Form field action: Fo",
+          "location": "AcroForm/Fields[0]/AA/Fo",
+          "detail": "A form field defines an event handler. Validate / Calculate / format handlers can run script.",
+          "evidence": {
+            "field": "probe_field",
+            "event": "Fo",
+            "action": {
+              "S": "/JavaScript",
+              "JS": "// PHANTOM-X benign form-field action probe\ntry { app.alert('PHANTOM-X: field JS action executed.'); } catch (e) {}\n"
+            }
+          },
+          "iocs": {}
+        },
+        {
+          "id": "PX1-070",
+          "category": "javascript",
+          "severity": "high",
+          "title": "JavaScript in document",
+          "location": "obj 1",
+          "detail": "Document contains JavaScript for a reader scripting engine. Execution depends on the reader's scripting policy, sandbox and any user prompt.",
+          "evidence": {
+            "location": "obj 1",
+            "also_referenced_at": [],
+            "name_path": [
+              "obj 1"
+            ],
+            "objnum": 1,
+            "script_length": 116,
+            "script_sha256": "4317e68ff323947d4cefa4dd5ce8eceec7e6d2caf1c21054b901961b9cb78202",
+            "script_preview": "// PHANTOM-X benign form-field action probe\ntry { app.alert('PHANTOM-X: field JS action executed.'); } catch (e) {}\n"
+          },
+          "iocs": {}
+        },
+        {
+          "id": "PX1-013",
+          "category": "form",
+          "severity": "low",
+          "title": "Interactive form present",
+          "location": "catalog/AcroForm",
+          "detail": "Document contains an AcroForm. Form fields may carry per-field actions that a reader honours.",
+          "evidence": {
+            "acroform": {
+              "Fields": [
+                "Ref(6 0 R)"
+              ],
+              "DA": "/Helv 0 Tf 0 g"
+            }
+          },
+          "iocs": {}
+        },
+        {
+          "id": "PX1-000",
+          "category": "metadata",
+          "severity": "info",
+          "title": "Document identity",
+          "location": "file",
+          "detail": "Hashes and container metadata for the analysed file.",
+          "evidence": {
+            "path": "/home/syco/phantom-x/phase1_pdf/samples/px09_form_with_action.pdf",
+            "size_bytes": 1199,
+            "sha256": "656fa649797c4ecefeed8b67e73a0dfdaaf6775236330f770b235020739bcf87",
+            "md5": "ce3f580844a260aa7d3232bf869b221c",
+            "pdf_version": "1.7",
+            "encrypted": false,
+            "page_count": 1,
+            "object_count": 7,
+            "xref_type": "table"
+          },
+          "iocs": {
+            "sha256": "656fa649797c4ecefeed8b67e73a0dfdaaf6775236330f770b235020739bcf87",
+            "md5": "ce3f580844a260aa7d3232bf869b221c"
+          }
+        }
+      ],
+      "parser_warnings": []
+    },
+    {
+      "schema": "phantom-x.phase1.pdf-inspection/1.0",
+      "tool": "pdf_inspector.py",
+      "generated_utc": "2026-11-10T21:10:31.720729+00:00",
+      "analysis_mode": "static-structure",
+      "file": {
+        "path": "/home/syco/phantom-x/phase1_pdf/samples/px10_embedded_pdf.pdf",
+        "size_bytes": 1715,
+        "sha256": "9c6c5514d99ea66eec5dfd56ff66227d85779ccf2329917f4b42d140b5742291",
+        "md5": "0ebb8817e49d3f5d452eb641ba415027",
+        "pdf_version": "1.7",
+        "encrypted": false,
+        "page_count": 1,
+        "object_count": 8,
+        "xref_type": "table",
+        "streams_seen": 2,
+        "streams_decoded": 1
+      },
+      "risk": {
+        "score": 6,
+        "band": "low",
+        "severity_counts": {
+          "info": 2,
+          "medium": 1
+        },
+        "interpretation": "Score reflects the PRESENCE of risky document features. It is not an execution verdict and not a malware verdict."
+      },
+      "summary": {
+        "actions": 0,
+        "javascript_entries": 0,
+        "embedded_files": 1,
+        "external_references": 0,
+        "annotations": 0,
+        "form_fields": 0,
+        "strings_of_interest": 0
+      },
+      "actions": [],
+      "javascript": [],
+      "embedded_files": [
+        {
+          "location": "obj 1",
+          "also_referenced_at": [],
+          "embedded_object_num": 1,
+          "name_path": [
+            "px_inner_document.pdf"
+          ],
+          "filename": "px_inner_document.pdf",
+          "embedded_object": null,
+          "declared_size": 872,
+          "encoded_size": 588,
+          "decoded_size": 872,
+          "size_matches_declared": true,
+          "filters": [
+            "FlateDecode"
+          ],
+          "subtype": "application#2Fpdf",
+          "checksum": null,
+          "filespec": {
+            "Type": "/Filespec",
+            "F": "px_inner_document.pdf",
+            "UF": "px_inner_document.pdf",
+            "EF": {
+              "F": "Ref(1 0 R)"
+            },
+            "Desc": "PHANTOM-X nested PDF attachment"
+          },
+          "params": {
+            "Size": 872
+          },
+          "sha256": "08f8baec3cb44af6c406199b034fda118c01289a3dca612460235db8ac9e19a0",
+          "md5": "451c38fca23ecc6cf6fdf7f5309e1a00",
+          "magic": "255044462d312e37",
+          "identified_type": "PDF document",
+          "entropy": 5.728,
+          "is_ascii_text": false,
+          "extracted_to": "./quarantine/px_inner_document.pdf"
+        }
+      ],
+      "external_references": [],
+      "annotations": [],
+      "form_fields": [],
+      "strings_of_interest": [],
+      "findings": [
+        {
+          "id": "PX1-060",
+          "category": "embedded-file",
+          "severity": "medium",
+          "title": "Embedded file present",
+          "location": "obj 1",
+          "detail": "Document carries an embedded file. Extraction and opening are separate events; a reader may not offer to open it without user action.",
+          "evidence": {
+            "location": "obj 1",
+            "also_referenced_at": [],
+            "embedded_object_num": 1,
+            "name_path": [
+              "px_inner_document.pdf"
+            ],
+            "filename": "px_inner_document.pdf",
+            "embedded_object": null,
+            "declared_size": 872,
+            "encoded_size": 588,
+            "decoded_size": 872,
+            "size_matches_declared": true,
+            "filters": [
+              "FlateDecode"
+            ],
+            "subtype": "application#2Fpdf",
+            "checksum": null,
+            "filespec": {
+              "Type": "/Filespec",
+              "F": "px_inner_document.pdf",
+              "UF": "px_inner_document.pdf",
+              "EF": {
+                "F": "Ref(1 0 R)"
+              },
+              "Desc": "PHANTOM-X nested PDF attachment"
+            },
+            "params": {
+              "Size": 872
+            },
+            "sha256": "08f8baec3cb44af6c406199b034fda118c01289a3dca612460235db8ac9e19a0",
+            "md5": "451c38fca23ecc6cf6fdf7f5309e1a00",
+            "magic": "255044462d312e37",
+            "identified_type": "PDF document",
+            "entropy": 5.728,
+            "is_ascii_text": false,
+            "extracted_to": "./quarantine/px_inner_document.pdf"
+          },
+          "iocs": {
+            "sha256": "08f8baec3cb44af6c406199b034fda118c01289a3dca612460235db8ac9e19a0",
+            "filename": "px_inner_document.pdf",
+            "identified_type": "PDF document"
+          }
+        },
+        {
+          "id": "PX1-000",
+          "category": "metadata",
+          "severity": "info",
+          "title": "Document identity",
+          "location": "file",
+          "detail": "Hashes and container metadata for the analysed file.",
+          "evidence": {
+            "path": "/home/syco/phantom-x/phase1_pdf/samples/px10_embedded_pdf.pdf",
+            "size_bytes": 1715,
+            "sha256": "9c6c5514d99ea66eec5dfd56ff66227d85779ccf2329917f4b42d140b5742291",
+            "md5": "0ebb8817e49d3f5d452eb641ba415027",
+            "pdf_version": "1.7",
+            "encrypted": false,
+            "page_count": 1,
+            "object_count": 8,
+            "xref_type": "table"
+          },
+          "iocs": {
+            "sha256": "9c6c5514d99ea66eec5dfd56ff66227d85779ccf2329917f4b42d140b5742291",
+            "md5": "0ebb8817e49d3f5d452eb641ba415027"
+          }
+        },
+        {
+          "id": "PX1-021",
+          "category": "name-tree",
+          "severity": "info",
+          "title": "Name tree entry: px_inner_document.pdf",
+          "location": "catalog/Names/EmbeddedFiles/Names[0]",
+          "detail": "Dictionary entry in a name tree.",
+          "evidence": {
+            "dict": {
+              "Type": "/Filespec",
+              "F": "px_inner_document.pdf",
+              "UF": "px_inner_document.pdf",
+              "EF": {
+                "F": "Ref(1 0 R)"
+              },
+              "Desc": "PHANTOM-X nested PDF attachment"
+            }
+          },
+          "iocs": {}
+        }
+      ],
+      "parser_warnings": []
+    },
+    {
+      "schema": "phantom-x.phase1.pdf-inspection/1.0",
+      "tool": "pdf_inspector.py",
+      "generated_utc": "2026-11-10T21:10:31.721443+00:00",
+      "analysis_mode": "static-structure",
+      "file": {
+        "path": "/home/syco/phantom-x/phase1_pdf/samples/px11_combined.pdf",
+        "size_bytes": 2309,
+        "sha256": "e8a09c2e4d6ba782cf494b5da041435d5bc1a3db37b87367e0f559ccf6a95941",
+        "md5": "f35f9112381fc3a0b74b5f8ba00d3626",
+        "pdf_version": "1.7",
+        "encrypted": false,
+        "page_count": 1,
+        "object_count": 17,
+        "xref_type": "table",
+        "streams_seen": 2,
+        "streams_decoded": 1
+      },
+      "risk": {
+        "score": 100,
+        "band": "critical",
+        "severity_counts": {
+          "info": 2,
+          "high": 4,
+          "low": 3,
+          "medium": 5
+        },
+        "interpretation": "Score reflects the PRESENCE of risky document features. It is not an execution verdict and not a malware verdict."
+      },
+      "summary": {
+        "actions": 4,
+        "javascript_entries": 1,
+        "embedded_files": 1,
+        "external_references": 3,
+        "annotations": 4,
+        "form_fields": 0,
+        "strings_of_interest": 0
+      },
+      "actions": [
+        {
+          "location": "catalog/OpenAction",
+          "also_referenced_at": [
+            "page[0]/AA/O",
+            "obj 4"
+          ],
+          "objnum": 4,
+          "action_type": "JavaScript",
+          "severity": "high",
+          "requires_interaction": false,
+          "parameters": {
+            "S": "/JavaScript",
+            "JS": "try { app.alert('PHANTOM-X combined probe'); } catch (e) {}\n"
+          }
+        },
+        {
+          "location": "page[0]/Annots[1]/A",
+          "also_referenced_at": [
+            "obj 6"
+          ],
+          "objnum": 6,
+          "action_type": "Launch",
+          "severity": "high",
+          "requires_interaction": true,
+          "parameters": {
+            "S": "/Launch",
+            "F": "px_harmless_target.txt"
+          }
+        },
+        {
+          "location": "page[0]/Annots[2]/A",
+          "also_referenced_at": [
+            "obj 7"
+          ],
+          "objnum": 7,
+          "action_type": "URI",
+          "severity": "medium",
+          "requires_interaction": true,
+          "parameters": {
+            "S": "/URI",
+            "URI": "https://example.com/phantom-x-combined"
+          }
+        },
+        {
+          "location": "page[0]/Annots[3]/A",
+          "also_referenced_at": [
+            "obj 8"
+          ],
+          "objnum": 8,
+          "action_type": "GoToR",
+          "severity": "medium",
+          "requires_interaction": true,
+          "parameters": {
+            "S": "/GoToR",
+            "F": "px_external_target.pdf",
+            "NewWindow": true
+          }
+        }
+      ],
+      "javascript": [
+        {
+          "location": "catalog/Names/JavaScript/Names[0]",
+          "also_referenced_at": [
+            "obj 4"
+          ],
+          "name_path": [
+            "px_combined_js"
+          ],
+          "objnum": 4,
+          "script_length": 60,
+          "script_sha256": "514e81882301af382fcdeeed44b926642b19dba32b594f17017dcc4dea408e61",
+          "script_preview": "try { app.alert('PHANTOM-X combined probe'); } catch (e) {}\n"
+        }
+      ],
+      "embedded_files": [
+        {
+          "location": "page[0]/Annots[0]/FileAttachment",
+          "also_referenced_at": [
+            "obj 1"
+          ],
+          "embedded_object_num": 1,
+          "name_path": [
+            "px_combined_attachment.txt"
+          ],
+          "filename": "px_combined_attachment.txt",
+          "embedded_object": null,
+          "declared_size": 45,
+          "encoded_size": 53,
+          "decoded_size": 45,
+          "size_matches_declared": true,
+          "filters": [
+            "FlateDecode"
+          ],
+          "subtype": "text#2Fplain",
+          "checksum": null,
+          "filespec": {
+            "Type": "/Filespec",
+            "F": "px_combined_attachment.txt",
+            "UF": "px_combined_attachment.txt",
+            "EF": {
+              "F": "Ref(1 0 R)"
+            }
+          },
+          "params": {
+            "Size": 45
+          },
+          "sha256": "1f0a1333076cec0feea3817331f67a38339a66068908dd8de18fa62a95b00803",
+          "md5": "43685094a691e7d7e19fc6f0ae1dcd1e",
+          "magic": "5048414e544f4d2d",
+          "identified_type": "plain text",
+          "entropy": 4.508,
+          "is_ascii_text": true,
+          "extracted_to": "./quarantine/px_combined_attachment.txt"
+        }
+      ],
+      "external_references": [
+        {
+          "location": "page[0]/Annots[1]/A",
+          "action_type": "Launch",
+          "parameter": "F",
+          "value": "px_harmless_target.txt",
+          "kind": "relative-file"
+        },
+        {
+          "location": "page[0]/Annots[2]/A",
+          "action_type": "URI",
+          "parameter": "URI",
+          "value": "https://example.com/phantom-x-combined",
+          "kind": "url"
+        },
+        {
+          "location": "page[0]/Annots[3]/A",
+          "action_type": "GoToR",
+          "parameter": "F",
+          "value": "px_external_target.pdf",
+          "kind": "relative-file"
+        }
+      ],
+      "annotations": [
+        {
+          "location": "page[0]/Annots[0]",
+          "subtype": "FileAttachment",
+          "flags": null,
+          "contents": "combined attachment",
+          "name": "",
+          "has_action": false
+        },
+        {
+          "location": "page[0]/Annots[1]",
+          "subtype": "Link",
+          "flags": null,
+          "contents": "combined launch",
+          "name": "",
+          "has_action": true
+        },
+        {
+          "location": "page[0]/Annots[2]",
+          "subtype": "Link",
+          "flags": null,
+          "contents": "combined uri",
+          "name": "",
+          "has_action": true
+        },
+        {
+          "location": "page[0]/Annots[3]",
+          "subtype": "Link",
+          "flags": null,
+          "contents": "combined gotoR",
+          "name": "",
+          "has_action": true
+        }
+      ],
+      "form_fields": [],
+      "strings_of_interest": [],
+      "findings": [
+        {
+          "id": "PX1-010",
+          "category": "open-action",
+          "severity": "high",
+          "title": "Catalog /OpenAction (JavaScript)",
+          "location": "catalog/OpenAction",
+          "detail": "Executes script in the reader's scripting engine.",
+          "evidence": {
+            "action_type": "JavaScript",
+            "action_dict": {
+              "S": "/JavaScript",
+              "JS": "try { app.alert('PHANTOM-X combined probe'); } catch (e) {}\n"
+            }
+          },
+          "iocs": {}
+        },
+        {
+          "id": "PX1-070",
+          "category": "javascript",
+          "severity": "high",
+          "title": "JavaScript in document",
+          "location": "catalog/Names/JavaScript/Names[0]",
+          "detail": "Document contains JavaScript for a reader scripting engine. Execution depends on the reader's scripting policy, sandbox and any user prompt.",
+          "evidence": {
+            "location": "catalog/Names/JavaScript/Names[0]",
+            "also_referenced_at": [
+              "obj 4"
+            ],
+            "name_path": [
+              "px_combined_js"
+            ],
+            "objnum": 4,
+            "script_length": 60,
+            "script_sha256": "514e81882301af382fcdeeed44b926642b19dba32b594f17017dcc4dea408e61",
+            "script_preview": "try { app.alert('PHANTOM-X combined probe'); } catch (e) {}\n"
+          },
+          "iocs": {}
+        },
+        {
+          "id": "PX1-040",
+          "category": "embedded-file",
+          "severity": "high",
+          "title": "File attachment annotation",
+          "location": "page[0]/Annots[0]",
+          "detail": "An embedded file is attached to this page. A reader may extract and/or open it.",
+          "evidence": {
+            "annotation": {
+              "location": "page[0]/Annots[0]",
+              "subtype": "FileAttachment",
+              "flags": null,
+              "contents": "combined attachment",
+              "name": "",
+              "has_action": false
+            },
+            "filespec": {
+              "Type": "/Filespec",
+              "F": "px_combined_attachment.txt",
+              "UF": "px_combined_attachment.txt",
+              "EF": {
+                "F": "Ref(1 0 R)"
+              }
+            }
+          },
+          "iocs": {
+            "F": "px_combined_attachment.txt",
+            "UF": "px_combined_attachment.txt"
+          }
+        },
+        {
+          "id": "PX1-041",
+          "category": "annotation-action",
+          "severity": "high",
+          "title": "Annotation action (Launch action)",
+          "location": "page[0]/Annots[1]/A",
+          "detail": "Instructs the reader to launch an external application or file.",
+          "evidence": {
+            "action": {
+              "S": "/Launch",
+              "F": "px_harmless_target.txt"
+            }
+          },
+          "iocs": {
+            "F": "px_harmless_target.txt"
+          }
+        },
+        {
+          "id": "PX1-030",
+          "category": "document-event",
+          "severity": "medium",
+          "title": "Page additional action: O",
+          "location": "page[0]/AA/O",
+          "detail": "Page-level event handler is defined.",
+          "evidence": {
+            "event": "O",
+            "action": {
+              "S": "/JavaScript",
+              "JS": "try { app.alert('PHANTOM-X combined probe'); } catch (e) {}\n"
+            }
+          },
+          "iocs": {}
+        },
+        {
+          "id": "PX1-060",
+          "category": "embedded-file",
+          "severity": "medium",
+          "title": "Embedded file present",
+          "location": "page[0]/Annots[0]/FileAttachment",
+          "detail": "Document carries an embedded file. Extraction and opening are separate events; a reader may not offer to open it without user action.",
+          "evidence": {
+            "location": "page[0]/Annots[0]/FileAttachment",
+            "also_referenced_at": [
+              "obj 1"
+            ],
+            "embedded_object_num": 1,
+            "name_path": [
+              "px_combined_attachment.txt"
+            ],
+            "filename": "px_combined_attachment.txt",
+            "embedded_object": null,
+            "declared_size": 45,
+            "encoded_size": 53,
+            "decoded_size": 45,
+            "size_matches_declared": true,
+            "filters": [
+              "FlateDecode"
+            ],
+            "subtype": "text#2Fplain",
+            "checksum": null,
+            "filespec": {
+              "Type": "/Filespec",
+              "F": "px_combined_attachment.txt",
+              "UF": "px_combined_attachment.txt",
+              "EF": {
+                "F": "Ref(1 0 R)"
+              }
+            },
+            "params": {
+              "Size": 45
+            },
+            "sha256": "1f0a1333076cec0feea3817331f67a38339a66068908dd8de18fa62a95b00803",
+            "md5": "43685094a691e7d7e19fc6f0ae1dcd1e",
+            "magic": "5048414e544f4d2d",
+            "identified_type": "plain text",
+            "entropy": 4.508,
+            "is_ascii_text": true,
+            "extracted_to": "./quarantine/px_combined_attachment.txt"
+          },
+          "iocs": {
+            "sha256": "1f0a1333076cec0feea3817331f67a38339a66068908dd8de18fa62a95b00803",
+            "filename": "px_combined_attachment.txt",
+            "identified_type": "plain text"
+          }
+        },
+        {
+          "id": "PX1-041",
+          "category": "annotation-action",
+          "severity": "medium",
+          "title": "Annotation action (URI action)",
+          "location": "page[0]/Annots[2]/A",
+          "detail": "Instructs the reader to open a network resource (browser/handler).",
+          "evidence": {
+            "action": {
+              "S": "/URI",
+              "URI": "https://example.com/phantom-x-combined"
+            }
+          },
+          "iocs": {
+            "URI": "https://example.com/phantom-x-combined"
+          }
+        },
+        {
+          "id": "PX1-041",
+          "category": "annotation-action",
+          "severity": "medium",
+          "title": "Annotation action (Remote GoTo action)",
+          "location": "page[0]/Annots[3]/A",
+          "detail": "Opens a different PDF file; may reference a local or remote path.",
+          "evidence": {
+            "action": {
+              "S": "/GoToR",
+              "F": "px_external_target.pdf",
+              "NewWindow": true
+            }
+          },
+          "iocs": {
+            "F": "px_external_target.pdf"
+          }
+        },
+        {
+          "id": "PX1-080",
+          "category": "external-reference",
+          "severity": "medium",
+          "title": "External reference in URI (url)",
+          "location": "page[0]/Annots[2]/A",
+          "detail": "Action points at a resource outside the document. A reader may resolve, fetch, or launch it -- subject to reader policy.",
+          "evidence": {
+            "location": "page[0]/Annots[2]/A",
+            "action_type": "URI",
+            "parameter": "URI",
+            "value": "https://example.com/phantom-x-combined",
+            "kind": "url"
+          },
+          "iocs": {
+            "url": "https://example.com/phantom-x-combined",
+            "kind": "url"
+          }
+        },
+        {
+          "id": "PX1-013",
+          "category": "form",
+          "severity": "low",
+          "title": "Interactive form present",
+          "location": "catalog/AcroForm",
+          "detail": "Document contains an AcroForm. Form fields may carry per-field actions that a reader honours.",
+          "evidence": {
+            "acroform": {
+              "Fields": [],
+              "DA": "/Helv 0 Tf 0 g"
+            }
+          },
+          "iocs": {}
+        },
+        {
+          "id": "PX1-080",
+          "category": "external-reference",
+          "severity": "low",
+          "title": "External reference in Launch (relative-file)",
+          "location": "page[0]/Annots[1]/A",
+          "detail": "Action points at a resource outside the document. A reader may resolve, fetch, or launch it -- subject to reader policy.",
+          "evidence": {
+            "location": "page[0]/Annots[1]/A",
+            "action_type": "Launch",
+            "parameter": "F",
+            "value": "px_harmless_target.txt",
+            "kind": "relative-file"
+          },
+          "iocs": {
+            "url": "px_harmless_target.txt",
+            "kind": "relative-file"
+          }
+        },
+        {
+          "id": "PX1-080",
+          "category": "external-reference",
+          "severity": "low",
+          "title": "External reference in GoToR (relative-file)",
+          "location": "page[0]/Annots[3]/A",
+          "detail": "Action points at a resource outside the document. A reader may resolve, fetch, or launch it -- subject to reader policy.",
+          "evidence": {
+            "location": "page[0]/Annots[3]/A",
+            "action_type": "GoToR",
+            "parameter": "F",
+            "value": "px_external_target.pdf",
+            "kind": "relative-file"
+          },
+          "iocs": {
+            "url": "px_external_target.pdf",
+            "kind": "relative-file"
+          }
+        },
+        {
+          "id": "PX1-000",
+          "category": "metadata",
+          "severity": "info",
+          "title": "Document identity",
+          "location": "file",
+          "detail": "Hashes and container metadata for the analysed file.",
+          "evidence": {
+            "path": "/home/syco/phantom-x/phase1_pdf/samples/px11_combined.pdf",
+            "size_bytes": 2309,
+            "sha256": "e8a09c2e4d6ba782cf494b5da041435d5bc1a3db37b87367e0f559ccf6a95941",
+            "md5": "f35f9112381fc3a0b74b5f8ba00d3626",
+            "pdf_version": "1.7",
+            "encrypted": false,
+            "page_count": 1,
+            "object_count": 17,
+            "xref_type": "table"
+          },
+          "iocs": {
+            "sha256": "e8a09c2e4d6ba782cf494b5da041435d5bc1a3db37b87367e0f559ccf6a95941",
+            "md5": "f35f9112381fc3a0b74b5f8ba00d3626"
+          }
+        },
+        {
+          "id": "PX1-021",
+          "category": "name-tree",
+          "severity": "info",
+          "title": "Name tree entry: px_combined_attachment.txt",
+          "location": "catalog/Names/EmbeddedFiles/Names[0]",
+          "detail": "Dictionary entry in a name tree.",
+          "evidence": {
+            "dict": {
+              "Type": "/Filespec",
+              "F": "px_combined_attachment.txt",
+              "UF": "px_combined_attachment.txt",
+              "EF": {
+                "F": "Ref(1 0 R)"
+              }
+            }
+          },
+          "iocs": {}
+        }
+      ],
+      "parser_warnings": []
+    },
+    {
+      "schema": "phantom-x.phase1.pdf-inspection/1.0",
+      "tool": "pdf_inspector.py",
+      "generated_utc": "2026-11-10T21:10:31.722721+00:00",
+      "analysis_mode": "static-structure",
+      "file": {
+        "path": "/home/syco/phantom-x/phase1_pdf/samples/px_attack_chain.pdf",
+        "size_bytes": 8429,
+        "sha256": "e1cb4faca184cb34299e0636a5aa02c91020aad3415321edc74dfea2f2e0a4fc",
+        "md5": "023a66ff16edc14996e58aa5878771cb",
+        "pdf_version": "1.7",
+        "encrypted": false,
+        "page_count": 1,
+        "object_count": 10,
+        "xref_type": "table",
+        "streams_seen": 2,
+        "streams_decoded": 1
+      },
+      "risk": {
+        "score": 36,
+        "band": "medium",
+        "severity_counts": {
+          "info": 2,
+          "high": 2
+        },
+        "interpretation": "Score reflects the PRESENCE of risky document features. It is not an execution verdict and not a malware verdict."
+      },
+      "summary": {
+        "actions": 0,
+        "javascript_entries": 0,
+        "embedded_files": 1,
+        "external_references": 0,
+        "annotations": 1,
+        "form_fields": 0,
+        "strings_of_interest": 0
+      },
+      "actions": [],
+      "javascript": [],
+      "embedded_files": [
+        {
+          "location": "page[0]/Annots[0]/FileAttachment",
+          "also_referenced_at": [
+            "obj 1"
+          ],
+          "embedded_object_num": 1,
+          "name_path": [
+            "Q4_Invoice_2026.pdf"
+          ],
+          "filename": "Q4_Invoice_2026.pdf",
+          "embedded_object": null,
+          "declared_size": 18779,
+          "encoded_size": 6998,
+          "decoded_size": 18779,
+          "size_matches_declared": true,
+          "filters": [
+            "FlateDecode"
+          ],
+          "subtype": "application#2Fvnd.microsoft.portable-executable",
+          "checksum": null,
+          "filespec": {
+            "Type": "/Filespec",
+            "F": "Q4_Invoice_2026.pdf",
+            "UF": "Q4_Invoice_2026.pdf",
+            "EF": {
+              "F": "Ref(1 0 R)"
+            },
+            "Desc": "Q4 Invoice"
+          },
+          "params": {
+            "Size": 18779
+          },
+          "sha256": "8b7888fc28b05471a339dbdfaa8542c3502c2357eed0d84da2458cd4d089ce74",
+          "md5": "5a4b18bf89d8849ff92906d0e7d27da9",
+          "magic": "4d5a900003000000",
+          "identified_type": "PE/DOS executable",
+          "entropy": 4.978,
+          "is_ascii_text": false,
+          "extracted_to": "./quarantine/Q4_Invoice_2026.pdf"
+        }
+      ],
+      "external_references": [],
+      "annotations": [
+        {
+          "location": "page[0]/Annots[0]",
+          "subtype": "FileAttachment",
+          "flags": null,
+          "contents": "Q4 Invoice",
+          "name": "",
+          "has_action": false
+        }
+      ],
+      "form_fields": [],
+      "strings_of_interest": [],
+      "findings": [
+        {
+          "id": "PX1-060",
+          "category": "embedded-file",
+          "severity": "high",
+          "title": "Embedded file present",
+          "location": "page[0]/Annots[0]/FileAttachment",
+          "detail": "Embedded content identifies as an executable image. This is the classic 'open the attachment' step of a PDF delivery chain; whether the reader executes or merely stages it depends on reader policy and user action.",
+          "evidence": {
+            "location": "page[0]/Annots[0]/FileAttachment",
+            "also_referenced_at": [
+              "obj 1"
+            ],
+            "embedded_object_num": 1,
+            "name_path": [
+              "Q4_Invoice_2026.pdf"
+            ],
+            "filename": "Q4_Invoice_2026.pdf",
+            "embedded_object": null,
+            "declared_size": 18779,
+            "encoded_size": 6998,
+            "decoded_size": 18779,
+            "size_matches_declared": true,
+            "filters": [
+              "FlateDecode"
+            ],
+            "subtype": "application#2Fvnd.microsoft.portable-executable",
+            "checksum": null,
+            "filespec": {
+              "Type": "/Filespec",
+              "F": "Q4_Invoice_2026.pdf",
+              "UF": "Q4_Invoice_2026.pdf",
+              "EF": {
+                "F": "Ref(1 0 R)"
+              },
+              "Desc": "Q4 Invoice"
+            },
+            "params": {
+              "Size": 18779
+            },
+            "sha256": "8b7888fc28b05471a339dbdfaa8542c3502c2357eed0d84da2458cd4d089ce74",
+            "md5": "5a4b18bf89d8849ff92906d0e7d27da9",
+            "magic": "4d5a900003000000",
+            "identified_type": "PE/DOS executable",
+            "entropy": 4.978,
+            "is_ascii_text": false,
+            "extracted_to": "./quarantine/Q4_Invoice_2026.pdf"
+          },
+          "iocs": {
+            "sha256": "8b7888fc28b05471a339dbdfaa8542c3502c2357eed0d84da2458cd4d089ce74",
+            "filename": "Q4_Invoice_2026.pdf",
+            "identified_type": "PE/DOS executable"
+          }
+        },
+        {
+          "id": "PX1-040",
+          "category": "embedded-file",
+          "severity": "high",
+          "title": "File attachment annotation",
+          "location": "page[0]/Annots[0]",
+          "detail": "An embedded file is attached to this page. A reader may extract and/or open it.",
+          "evidence": {
+            "annotation": {
+              "location": "page[0]/Annots[0]",
+              "subtype": "FileAttachment",
+              "flags": null,
+              "contents": "Q4 Invoice",
+              "name": "",
+              "has_action": false
+            },
+            "filespec": {
+              "Type": "/Filespec",
+              "F": "Q4_Invoice_2026.pdf",
+              "UF": "Q4_Invoice_2026.pdf",
+              "EF": {
+                "F": "Ref(1 0 R)"
+              },
+              "Desc": "Q4 Invoice"
+            }
+          },
+          "iocs": {
+            "F": "Q4_Invoice_2026.pdf",
+            "UF": "Q4_Invoice_2026.pdf"
+          }
+        },
+        {
+          "id": "PX1-000",
+          "category": "metadata",
+          "severity": "info",
+          "title": "Document identity",
+          "location": "file",
+          "detail": "Hashes and container metadata for the analysed file.",
+          "evidence": {
+            "path": "/home/syco/phantom-x/phase1_pdf/samples/px_attack_chain.pdf",
+            "size_bytes": 8429,
+            "sha256": "e1cb4faca184cb34299e0636a5aa02c91020aad3415321edc74dfea2f2e0a4fc",
+            "md5": "023a66ff16edc14996e58aa5878771cb",
+            "pdf_version": "1.7",
+            "encrypted": false,
+            "page_count": 1,
+            "object_count": 10,
+            "xref_type": "table"
+          },
+          "iocs": {
+            "sha256": "e1cb4faca184cb34299e0636a5aa02c91020aad3415321edc74dfea2f2e0a4fc",
+            "md5": "023a66ff16edc14996e58aa5878771cb"
+          }
+        },
+        {
+          "id": "PX1-021",
+          "category": "name-tree",
+          "severity": "info",
+          "title": "Name tree entry: Q4_Invoice_2026.pdf",
+          "location": "catalog/Names/EmbeddedFiles/Names[0]",
+          "detail": "Dictionary entry in a name tree.",
+          "evidence": {
+            "dict": {
+              "Type": "/Filespec",
+              "F": "Q4_Invoice_2026.pdf",
+              "UF": "Q4_Invoice_2026.pdf",
+              "EF": {
+                "F": "Ref(1 0 R)"
+              },
+              "Desc": "Q4 Invoice"
+            }
+          },
+          "iocs": {}
+        }
+      ],
+      "parser_warnings": []
+    }
+  ]
+}

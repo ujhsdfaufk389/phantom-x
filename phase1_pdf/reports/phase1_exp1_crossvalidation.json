@@ -1,0 +1,286 @@
+{
+  "schema": "phantom-x.phase1.crossvalidation/1.0",
+  "generated_utc": "2026-11-10T20:12:23.060793+00:00",
+  "reference_implementation": "pypdf 6.19.0",
+  "counting_basis": "payload identity (PDF object identity)",
+  "rows": [
+    {
+      "file": "px01_clean_baseline.pdf",
+      "mine": {
+        "javascript": 0,
+        "embedded_files": 0,
+        "actions": 0
+      },
+      "pypdf": {
+        "javascript": 0,
+        "embedded_files": 0,
+        "actions": 0
+      },
+      "reference_counts": {
+        "javascript": 0,
+        "embedded_files": 0,
+        "actions": 0
+      },
+      "mine_reference_counts": {
+        "javascript": 0,
+        "embedded_files": 0,
+        "actions": 0
+      }
+    },
+    {
+      "file": "px02_embedded_text.pdf",
+      "mine": {
+        "javascript": 0,
+        "embedded_files": 1,
+        "actions": 0
+      },
+      "pypdf": {
+        "javascript": 0,
+        "embedded_files": 1,
+        "actions": 0
+      },
+      "reference_counts": {
+        "javascript": 0,
+        "embedded_files": 2,
+        "actions": 0
+      },
+      "mine_reference_counts": {
+        "javascript": 0,
+        "embedded_files": 2,
+        "actions": 0
+      }
+    },
+    {
+      "file": "px03_embedded_exe_canary.pdf",
+      "mine": {
+        "javascript": 0,
+        "embedded_files": 1,
+        "actions": 0
+      },
+      "pypdf": {
+        "javascript": 0,
+        "embedded_files": 1,
+        "actions": 0
+      },
+      "reference_counts": {
+        "javascript": 0,
+        "embedded_files": 1,
+        "actions": 0
+      },
+      "mine_reference_counts": {
+        "javascript": 0,
+        "embedded_files": 1,
+        "actions": 0
+      }
+    },
+    {
+      "file": "px04_javascript.pdf",
+      "mine": {
+        "javascript": 1,
+        "embedded_files": 0,
+        "actions": 1
+      },
+      "pypdf": {
+        "javascript": 1,
+        "embedded_files": 0,
+        "actions": 1
+      },
+      "reference_counts": {
+        "javascript": 1,
+        "embedded_files": 0,
+        "actions": 1
+      },
+      "mine_reference_counts": {
+        "javascript": 2,
+        "embedded_files": 0,
+        "actions": 1
+      }
+    },
+    {
+      "file": "px05_launch_action.pdf",
+      "mine": {
+        "javascript": 0,
+        "embedded_files": 0,
+        "actions": 1
+      },
+      "pypdf": {
+        "javascript": 0,
+        "embedded_files": 0,
+        "actions": 1
+      },
+      "reference_counts": {
+        "javascript": 0,
+        "embedded_files": 0,
+        "actions": 1
+      },
+      "mine_reference_counts": {
+        "javascript": 0,
+        "embedded_files": 0,
+        "actions": 2
+      }
+    },
+    {
+      "file": "px06_uri_action.pdf",
+      "mine": {
+        "javascript": 0,
+        "embedded_files": 0,
+        "actions": 1
+      },
+      "pypdf": {
+        "javascript": 0,
+        "embedded_files": 0,
+        "actions": 1
+      },
+      "reference_counts": {
+        "javascript": 0,
+        "embedded_files": 0,
+        "actions": 1
+      },
+      "mine_reference_counts": {
+        "javascript": 0,
+        "embedded_files": 0,
+        "actions": 2
+      }
+    },
+    {
+      "file": "px07_openaction_js.pdf",
+      "mine": {
+        "javascript": 1,
+        "embedded_files": 0,
+        "actions": 1
+      },
+      "pypdf": {
+        "javascript": 1,
+        "embedded_files": 0,
+        "actions": 1
+      },
+      "reference_counts": {
+        "javascript": 1,
+        "embedded_files": 0,
+        "actions": 1
+      },
+      "mine_reference_counts": {
+        "javascript": 1,
+        "embedded_files": 0,
+        "actions": 2
+      }
+    },
+    {
+      "file": "px08_gotor_remote.pdf",
+      "mine": {
+        "javascript": 0,
+        "embedded_files": 0,
+        "actions": 1
+      },
+      "pypdf": {
+        "javascript": 0,
+        "embedded_files": 0,
+        "actions": 1
+      },
+      "reference_counts": {
+        "javascript": 0,
+        "embedded_files": 0,
+        "actions": 1
+      },
+      "mine_reference_counts": {
+        "javascript": 0,
+        "embedded_files": 0,
+        "actions": 2
+      }
+    },
+    {
+      "file": "px09_form_with_action.pdf",
+      "mine": {
+        "javascript": 1,
+        "embedded_files": 0,
+        "actions": 1
+      },
+      "pypdf": {
+        "javascript": 1,
+        "embedded_files": 0,
+        "actions": 1
+      },
+      "reference_counts": {
+        "javascript": 2,
+        "embedded_files": 0,
+        "actions": 2
+      },
+      "mine_reference_counts": {
+        "javascript": 1,
+        "embedded_files": 0,
+        "actions": 3
+      }
+    },
+    {
+      "file": "px10_embedded_pdf.pdf",
+      "mine": {
+        "javascript": 0,
+        "embedded_files": 1,
+        "actions": 0
+      },
+      "pypdf": {
+        "javascript": 0,
+        "embedded_files": 1,
+        "actions": 0
+      },
+      "reference_counts": {
+        "javascript": 0,
+        "embedded_files": 1,
+        "actions": 0
+      },
+      "mine_reference_counts": {
+        "javascript": 0,
+        "embedded_files": 1,
+        "actions": 0
+      }
+    },
+    {
+      "file": "px11_combined.pdf",
+      "mine": {
+        "javascript": 1,
+        "embedded_files": 1,
+        "actions": 4
+      },
+      "pypdf": {
+        "javascript": 1,
+        "embedded_files": 1,
+        "actions": 4
+      },
+      "reference_counts": {
+        "javascript": 3,
+        "embedded_files": 2,
+        "actions": 6
+      },
+      "mine_reference_counts": {
+        "javascript": 2,
+        "embedded_files": 2,
+        "actions": 9
+      }
+    },
+    {
+      "file": "px_attack_chain.pdf",
+      "mine": {
+        "javascript": 0,
+        "embedded_files": 1,
+        "actions": 0
+      },
+      "pypdf": {
+        "javascript": 0,
+        "embedded_files": 1,
+        "actions": 0
+      },
+      "reference_counts": {
+        "javascript": 0,
+        "embedded_files": 2,
+        "actions": 0
+      },
+      "mine_reference_counts": {
+        "javascript": 0,
+        "embedded_files": 2,
+        "actions": 0
+      }
+    }
+  ],
+  "disagreements": [],
+  "result": "pass"
+}

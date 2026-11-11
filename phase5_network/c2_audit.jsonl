@@ -1,0 +1,8 @@
+{"ts": "2026-11-10T20:14:58.498324+00:00", "kind": "server_start", "host": "0.0.0.0", "port": 9001, "log": "c2_audit.jsonl"}
+{"ts": "2026-11-10T21:00:45.000427+00:00", "kind": "session_open", "session": 1, "peer": "127.0.0.1:41612"}
+{"ts": "2026-11-10T21:00:45.001074+00:00", "kind": "hello", "session": 1, "arch": "x64", "pid": "1000", "host": "KALI"}
+{"ts": "2026-11-10T21:00:52.352291+00:00", "kind": "session_open", "session": 2, "peer": "127.0.0.1:36258"}
+{"ts": "2026-11-10T21:00:52.352701+00:00", "kind": "hello", "session": 2, "arch": "x64", "pid": "1024", "host": "KALI"}
+{"ts": "2026-11-10T21:15:14.107505+00:00", "kind": "session_close", "session": 1, "host": "KALI", "pid": "1000", "commands_completed": 0}
+{"ts": "2026-11-10T21:15:14.107884+00:00", "kind": "server_stop", "stats": {"sessions": 2, "commands": 0, "results": 0, "pings": 0}, "audit_records": 6}
+{"ts": "2026-11-10T21:15:34.162767+00:00", "kind": "server_start", "host": "0.0.0.0", "port": 9001, "log": "c2_audit.jsonl"}
