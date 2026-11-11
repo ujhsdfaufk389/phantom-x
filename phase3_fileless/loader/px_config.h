@@ -59,6 +59,10 @@
 #define PX_DGA 0
 #endif
 
+#ifndef PX_RESILIENT
+#define PX_RESILIENT 0
+#endif
+
 /* --- scope variants -------------------------------------------------- */
 #ifndef PX_CRED_ACCESS
 #define PX_CRED_ACCESS 0

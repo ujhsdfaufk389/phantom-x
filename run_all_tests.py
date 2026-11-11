@@ -229,7 +229,7 @@ def test_variants() -> Result:
 
     try:
         for arm in ("baseline", "obfuscate", "amsi", "etw", "encrypt",
-                    "dga", "cred", "lateral", "full"):
+                    "dga", "cred", "lateral", "resilient", "full"):
             exe = os.path.join(variants_dir, f"px_payload_{arm}.exe")
             if not os.path.isfile(exe):
                 detail.append(f"{arm}=missing")
@@ -271,6 +271,41 @@ def test_variants() -> Result:
         _remove_hosts_entry()
 
     return Result(name, ok, ", ".join(detail), time.time() - t0)
+
+
+def test_resilient_reconnect() -> Result:
+    """The resilient arm must come back when the connection drops.
+
+    This is the behaviour that makes the lab work on a network that is
+    not the one it was built on: the operator's laptop changed network,
+    the socket died, and the payload has to find its C2 again on its own.
+    """
+    name = "resilient reconnect"
+    go = find_tool("go.exe", r"%ProgramFiles%\Go\bin\go.exe")
+    if not go:
+        return Result(name, False, "Go toolchain not found", 0.0)
+
+    exe = os.path.join(ROOT, "dist", "variants", "px_payload_resilient.exe")
+    if not os.path.isfile(exe):
+        return Result(name, False, "no resilient build (run build_variants.ps1)",
+                      0.0)
+
+    t0 = time.time()
+    p = subprocess.run(
+        [go, "test", "-count=1", "-timeout", "200s", "-v",
+         "-run", "TestResilientPayloadReconnects", "-variant", exe, "."],
+        cwd=os.path.join(ROOT, "phase5_network"),
+        capture_output=True, text=True, timeout=300,
+    )
+    out = (p.stdout or "") + (p.stderr or "")
+    ok = "--- PASS" in out
+    detail = "PASS" if ok else "FAIL"
+    if not ok:
+        for line in out.splitlines():
+            if "did not reconnect" in line or "FAIL" in line:
+                detail = line.strip()
+                break
+    return Result(name, ok, detail, time.time() - t0)
 
 
 # The hosts entry that lets the DGA arm resolve its generated name to the
@@ -367,7 +402,8 @@ def main(argv=None) -> int:
         test_go_c2_integration,
     ]
     if not args.quick:
-        tests += [test_variants, test_pypdf, test_sysmon_schema]
+        tests += [test_variants, test_resilient_reconnect,
+                  test_pypdf, test_sysmon_schema]
 
     results = []
     for fn in tests:

