@@ -179,7 +179,46 @@ STEP 8 -- CROSS-VALIDATE (on the host)
 
 
 --------------------------------------------------------------------------------
-STEP 9 -- WHAT THE DETECTOR SEES
+STEP 9 -- THE VARIANT MATRIX
+--------------------------------------------------------------------------------
+    The baseline payload is plain. That is the COMPARISON arm: it produces
+    the clean telemetry that everything else is measured against.
+
+    The variant builds add one capability each, so that you can see what
+    changes in what the endpoint sees:
+
+        cd phase3_fileless\loader
+        .\build_variants.ps1 -C2Host <KALI-IP> -C2Port 9001
+
+    Produces nine binaries in dist\variants\:
+
+        px_payload_baseline.exe    plain -- the comparison arm
+        px_payload_obfuscate.exe   strings encoded, not in the binary
+        px_payload_amsi.exe        AMSI patched
+        px_payload_etw.exe         ETW unhooked
+        px_payload_encrypt.exe     encrypted C2 channel
+        px_payload_dga.exe         generated hostname
+        px_payload_cred.exe        credential access
+        px_payload_lateral.exe     lateral movement
+        px_payload_full.exe        everything at once
+
+    Copy the one you are testing to the VM and run it the same way as the
+    baseline. Then COMPARE: which Sysmon events still fire, which Defender
+    alerts still fire, which network rules still fire. A rule that only
+    fires on the baseline arm was riding on something the variant removed,
+    and that is a finding about the RULE.
+
+    The DGA arm needs the lab DNS helper running on the HOST:
+
+        cd phase5_network
+        python3 dga_dns.py --host <LAB-HOST-IP> --port 53 \
+            --c2 <LAB-HOST-IP> --prefix pxlab --tld .lab.test
+
+    and the VM's DNS pointed at the lab gateway.
+
+
+--------------------------------------------------------------------------------
+STEP 10 -- WHAT THE DETECTOR SEES
 --------------------------------------------------------------------------------
     On the HOST:
 
@@ -187,27 +226,43 @@ STEP 9 -- WHAT THE DETECTOR SEES
         dist\native\px_detect.exe --explain px-003
         dist\native\px_detect.exe --emit sigma > detections.yml
 
-    The Sigma rules are the deliverable that outlives the lab. They key on
-    what is observable, because a payload that evades produces no signal to
-    analyse, which would defeat the purpose of the detection study.
+    There are fourteen rules. Six of them are the detections for the
+    variant arms:
+
+        px-009  credential access -- LSASS handle with VM_READ
+        px-010  lateral movement -- remote service created over SMB
+        px-011  encrypted channel -- the traffic's shape, not its content
+        px-012  domain generation -- the DNS query pattern
+        px-013  AMSI or ETW unhooking -- writable+executable page
+        px-014  obfuscated binary -- shape rather than strings
+
+    px-013 is the important one: it catches the unhooking arms WITHOUT
+    relying on ETW being intact. A detection that needs the mechanism it
+    is detecting is not a detection.
+
+    The rules key on BEHAVIOUR rather than on strings, so they keep
+    working on the obfuscated arm.
 
 
 ================================================================================
 WHAT IS NOT IN THIS LAB, AND WHY
 ================================================================================
-    No obfuscation. No AMSI bypass. No ETW unhooking. No encrypted channel.
-    No domain generation. No persistence. No credential access. No lateral
-    movement.
+    No persistence. The payload never writes itself anywhere that survives
+    it. No privilege escalation. The payload only ever affects its own
+    process.
 
-    Two reasons.
+    Credential access collects but does not send the secret material to
+    the C2 server. Your C2 is a plain TCP listener; if it is reachable,
+    a payload that ships real credentials there has published them to
+    whoever can reach that address too. The detection question is answered
+    by the ACCESS -- the handle to lsass.exe, the memory reads -- not by
+    the contents, so the redacted report is a complete measurement.
 
-    The first is scope. The payload only ever affects its own process.
-
-    The second is method. A payload that evades produces no signal to
-    analyse, which would defeat the purpose of a detection study. Every
-    detection rule here keys on something observable. If the payload
-    started hiding, the rules would stop firing and the measurement would
-    become a claim rather than a result.
+    Lateral movement moves to ONE explicitly named host, which you supply.
+    No scanning, no target list, no propagation. A self-moving payload is
+    a worm, and a worm on a lab segment reaches every lab host the moment
+    you forget to clean up, at which point the telemetry stops being
+    repeatable.
 
     On "send a PDF to someone and their machine runs it": that requires
     code on the RECIPIENT's machine (a file-association handler, or a
