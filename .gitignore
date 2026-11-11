@@ -21,6 +21,7 @@ phase5_network/px_c2.exe
 
 # Windows build output
 dist/native/
+dist/variants/
 *.obj
 *.exp
 *.lib
