@@ -107,6 +107,7 @@ const helpText = `
   list                 show active sessions
   exec <id|all> <cmd>  run a command in one or all sessions
   ping <id|all>        measure round trip latency
+  cap <id> <tech> [a]  run one capability from the library
   dl <id> <path>       ask a session to transfer a file
   shot <id>            ask a session to capture the screen
   kill <id|all>        send EXIT (controlled session termination)
@@ -934,6 +935,69 @@ func (s *Server) exec(sess *Session, command string, timeout time.Duration) *exe
 	}
 }
 
+// capability runs one technique from the payload's capability library.
+//
+// The technique is named explicitly and the arguments are named
+// explicitly. There is no catalogue walk and no "run everything": the
+// lab measures one technique at a time, so that the telemetry delta is
+// attributable to that technique and to nothing else.
+//
+// The request carries a command id and the payload echoes it back, so
+// the answer can be correlated with the request. A session that runs
+// two capabilities at once would otherwise be ambiguous.
+func (s *Server) capability(sess *Session, name string, args string, timeout time.Duration) *execResult {
+	if !s.waitForHandshake(sess, timeout) {
+		return nil
+	}
+
+	s.sessionsMu.Lock()
+	s.cmdCounter++
+	cmdID := strconv.Itoa(s.cmdCounter)
+	s.sessionsMu.Unlock()
+
+	sess.commandsIssued++
+	s.bump("commands")
+
+	done := make(chan struct{})
+	sess.mu.Lock()
+	sess.pending[cmdID] = &pendingCmd{kind: "cap", t0: time.Now(), done: done}
+	sess.mu.Unlock()
+
+	s.audit.write("capability", map[string]any{
+		"session": sess.id, "cmd_id": cmdID, "technique": name, "args": args,
+	})
+
+	line := "CAP|" + cmdID + "|" + name
+	if args != "" {
+		line += "|" + args
+	}
+	if !sess.send(line) {
+		return nil
+	}
+
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		sess.mu.Lock()
+		delete(sess.pending, cmdID)
+		sess.mu.Unlock()
+		return nil
+	}
+
+	sess.resultMu.Lock()
+	res, ok := sess.results[cmdID]
+	sess.resultMu.Unlock()
+	if !ok {
+		return nil
+	}
+	return &execResult{
+		Output:    res.Output,
+		ExitCode:  res.ExitCode,
+		ElapsedMS: s.lastElapsed(sess, cmdID),
+		HasTiming: true,
+	}
+}
+
 // lastElapsed returns the measured duration of one command, if it was
 // recorded when the RESULT arrived.
 func (s *Server) lastElapsed(sess *Session, cmdID string) float64 {
@@ -1102,6 +1166,42 @@ func (s *Server) consoleCmd(line string) {
 				fmt.Println("       (no output)")
 			}
 		}
+	case strings.HasPrefix(line, "cap "):
+		// Run one technique from the payload's capability library.
+		//
+		// The technique and its arguments are named explicitly. Nothing
+		// is discovered and nothing is swept: the lab measures a
+		// technique, it does not go looking for things to measure.
+		rest := strings.TrimSpace(line[4:])
+		parts := strings.SplitN(rest, " ", 3)
+		if len(parts) < 2 {
+			fmt.Println("  usage: cap <session> <technique> [args]")
+			return
+		}
+		args := ""
+		if len(parts) > 2 {
+			args = parts[2]
+		}
+		for _, sess := range s.targets(parts[0]) {
+			fmt.Printf("  -> session %d: capability %s %s\n",
+				sess.id, parts[1], args)
+			res := s.capability(sess, parts[1], args, execTimeout)
+			if res == nil {
+				fmt.Printf("  <- session %d: TIMEOUT (no result within %s)\n",
+					sess.id, execTimeout)
+				continue
+			}
+			fmt.Printf("  <- session %d: exit=%s (%.1fms)\n",
+				sess.id, res.ExitCode, res.ElapsedMS)
+			if res.Output != "" {
+				for _, ol := range strings.Split(strings.TrimRight(res.Output, "\r\n"), "\n") {
+					fmt.Println("       " + ol)
+				}
+			} else {
+				fmt.Println("       (no output)")
+			}
+		}
+
 	case strings.HasPrefix(line, "dl "):
 		// Ask a session to transfer a file.
 		//

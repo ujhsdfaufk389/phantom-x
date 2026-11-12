@@ -115,6 +115,12 @@ def drive_python_server(port: int) -> tuple[list[str], list[str], dict]:
         c.send("PONG")
         time.sleep(0.4)
 
+        # The capability report. Both servers must read the mask the
+        # same way, because it is what makes a baseline session
+        # distinguishable from a variant session in the audit log.
+        c.send("CAPS|47")
+        time.sleep(0.4)
+
         # Ask for a latency measurement and see what comes back.
         srv.send_ping_probe = getattr(srv, "send_ping_probe", None)
         sess = list(srv.sessions.values())[0]
@@ -122,6 +128,15 @@ def drive_python_server(port: int) -> tuple[list[str], list[str], dict]:
         time.sleep(0.5)
 
         c.send("RESULT|1|VGVsbG8gU1RFU1RJTkdUVkVSU0U=|0")
+        time.sleep(0.4)
+
+        # A file transfer. The chunks and the DONE marker must be
+        # reassembled identically on both sides, and the audit record
+        # must carry the same SHA-256 -- which is the server's hash of
+        # what arrived, not one the payload claimed.
+        c.send("CHUNK|7|0|5|QUJDREU=")
+        c.send("CHUNK|7|1|5|RUZHSU==")
+        c.send("DONE|7|10")
         time.sleep(0.4)
 
         c.send("EXIT")
@@ -173,7 +188,13 @@ def drive_go_server(binary: str, port: int) -> tuple[list[str], list[str], dict]
         time.sleep(0.4)
         c.send("PONG")
         time.sleep(0.4)
+        c.send("CAPS|47")
+        time.sleep(0.4)
         c.send("RESULT|1|VGVsbG8gU1RFU1RJTkdUVkVSU0U=|0")
+        time.sleep(0.4)
+        c.send("CHUNK|7|0|5|QUJDREU=")
+        c.send("CHUNK|7|1|5|RUZHSU==")
+        c.send("DONE|7|10")
         time.sleep(0.4)
         c.send("EXIT")
         time.sleep(0.3)

