@@ -18,6 +18,10 @@ phase7_detection/target/
 # Go build output
 phase5_network/px_c2
 phase5_network/px_c2.exe
+# "go build ./..." in this directory drops a binary named after the
+# module. It is 5MB of build output and it does not belong in the tree.
+phase5_network/*.exe
+phase5_network/phase5_network
 
 # Windows build output
 dist/native/
