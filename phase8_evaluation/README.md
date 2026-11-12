@@ -45,7 +45,7 @@ python3 px_eval.py --rules rules.json --events events.json
   px-002    medium    YES  PDF File Opened By An Unusual Loader Pro
   px-003    high      YES  C2 Protocol HELLO Followed By PING PONG
   ...
-  6/14 rules fired, 8 silent
+  50 rules, 6 fired, 44 silent
 ```
 
 It is a small evaluator for the subset of Sigma these rules use, not a
@@ -72,30 +72,49 @@ eyes as anyone else.
 The matrix is the lab's output:
 
 ```
-  TECHNIQUE        ARM                        RULES
-  T1003.001        credential access (LSASS)   px-009
-  T1027.002        software packing            px-014
-  T1055.012        process hollowing           px-001,px-005
+  TECHNIQUE     TACTIC             STATUS          RULES
+  T1003.001     credential-access  measured        px-009, px-043
+  T1027.003     defense-evasion    measured        px-038
+  T1548.002     privilege-escalation not exercised
   ...
+
+  THE DENOMINATOR
+    techniques in scope   : 93
+    measured              : 54
+    ruled but not measured: 12
+    not exercised at all  : 27
+    of which campaigns    : 4
 
   RULES THAT FIRED ON THE BASELINE AND ARE SILENT ON THE VARIANT
   (these were riding on something the variant removed)
 
     px-002  PDF File Opened By An Unusual Loader Process
           catches: the loader, on every arm
-    px-004  Process Created From PDF With Embedded PE Pa
-          catches: the loader, on every arm
 ```
 
-Two kinds of gap, and they need different answers:
+The matrix is driven by the **catalogue**, not by a list kept in the Python
+tool, so the denominator is the same everywhere:
+
+```bash
+phase7_detection/target/release/px_detect.exe --emit catalog > catalog.json
+
+python3 phase8_evaluation/coverage.py \
+    --rules rules.json --catalog catalog.json \
+    --baseline events_baseline_arm.json \
+    --variant events_obfuscate_arm.json
+```
+
+Three kinds of gap, and they need different answers:
 
 | Gap | What it means | Fix |
 |---|---|---|
 | a technique with no rule | nothing would catch it | write a rule |
 | a rule that never fires | it might be broken, or the technique might not be exercised | find out which |
+| a technique not exercised | the lab says nothing about it | build a capability, or say so |
 
 The second kind is the interesting one. A rule that looks right and never
-fires gives false confidence.
+fires gives false confidence -- and the catalogue's `ruled` status is
+exactly that, made visible.
 
 ### `make_synthetic_events.py` -- the test fixtures
 
@@ -151,6 +170,7 @@ phase7_detection/target/release/px_detect.exe --emit json > rules.json
 
 python3 phase8_evaluation/coverage.py \
     --rules rules.json \
+    --catalog catalog.json \
     --baseline events_baseline_arm.json \
     --variant events_obfuscate_arm.json
 ```
@@ -169,6 +189,16 @@ arms. Each is written to key on **behaviour** rather than on a string,
 because a rule that keys on a string stops working the moment the string
 is encoded.
 
+The capability rules (px-015 onwards) are the detections for the technique
+library, and they were written in the opposite order: for each technique
+the question was asked **first** -- *if this happened on a real host, what
+would the endpoint see?* -- and the answer became the rule. Then the
+capability was written to produce exactly that telemetry.
+
+That order matters. A rule written after the fact tends to key on whatever
+the code happened to do; a rule written first tends to key on the behaviour
+that matters.
+
 **px-013 is the important one.** It catches the AMSI and ETW unhooking
 arms by the writable-and-executable page they leave behind in a signed
 module -- and it does that **without needing ETW**, which the unhooked
@@ -183,10 +213,23 @@ not a detection.
 python3 phase8_evaluation/test_evaluator.py
 ```
 
-153 assertions pinning the semantics: the selection must match, the filter
-must not, matchers inside a block are OR'd, the comparison is
-case-insensitive, an absent field never matches, and a backslash in a
-Windows path survives the JSON round trip.
+996 assertions pinning the semantics: the selection must match, the
+selection_and block must match, the filter must not, matchers inside a
+block are OR'd, the comparison is case-insensitive, an absent field never
+matches, and a backslash in a Windows path survives the JSON round trip.
+
+Three of those checks are about the rules rather than the evaluator, and
+they are the ones that keep a rule from being a noise generator:
+
+- **every synthetic arm fires its own rules** -- one arm per technique, so
+  that a telemetry delta can be attributed to the technique that produced
+  it
+- **and only its own rules** -- a rule that fires on every event of every
+  arm is not a detection, it is a line of noise in the report
+- **every rule the catalogue names exists, and every technique a rule
+  claims is in the catalogue** -- a catalogue entry that names a rule
+  which does not exist would make the coverage matrix claim a technique
+  is covered when nothing detects it
 
 That last one is not hypothetical. The first version of the JSON emitter
 did not escape backslashes, so every path in every rule was an invalid

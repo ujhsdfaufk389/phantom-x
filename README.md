@@ -36,6 +36,94 @@ Reproduce: `python3 phase5_network/test_chain_integration.py`
 
 ---
 
+## The technique catalogue
+
+The lab knows about **93 ATT&CK techniques**. That number is the point: it is
+the denominator. A lab that reports only its successes is a brochure.
+
+```
+  PHANTOM-X :: THE CATALOGUE
+
+    techniques in scope   : 93
+    measured              : 54
+    ruled but not measured: 12
+    not exercised at all  : 27
+    of which campaigns    : 4
+```
+
+Three statuses, and they are not equally good:
+
+| Status | What it means |
+|---|---|
+| `measured` | The lab exercises the technique, so the telemetry is real and the rule has been tested against it. |
+| `ruled` | A rule exists, but nobody has watched it fire. **A rule that has never fired is a hypothesis.** |
+| `not_exercised` | Neither. The lab says nothing about it, and the catalogue says so. |
+
+The four campaigns — ransomware, wiper, cryptojacking, botnet — are listed as
+campaigns rather than techniques. A ransomware run is a hundred techniques
+executed in an order; no single capability in a single binary is
+"ransomware", and pretending otherwise would have made the denominator a lie.
+
+```powershell
+# the catalogue as a table
+phase7_detection\target\release\px_detect.exe --catalog
+
+# the catalogue as JSON, for the coverage matrix
+phase7_detection\target\release\px_detect.exe --emit catalog > catalog.json
+```
+
+The rules live in `phase7_detection/src/detections.rs` and
+`phase7_detection/src/rules_extra.rs`; the catalogue lives in
+`phase7_detection/src/catalog.rs`.
+
+---
+
+## The capability library
+
+Fourteen techniques are exercised by a single table-driven library, so that
+each one can be measured on its own and its telemetry attributed to it.
+
+```
+inject    process injection            T1055
+token     token theft                  T1134.001
+keylog    keylogging                   T1056.001
+clip      clipboard                    T1115
+persist   Run key / WMI subscription    T1547.001, T1546.003
+antifor   self-delete / timestomp / logs T1070.004, T1070.006, T1070.001
+recon     sysinfo / processes / users   T1082, T1057, T1087, T1046
+lolbin    signed binary proxy          T1218
+script    script host abuse            T1059.005, T1059.007
+dnstun    data inside DNS              T1572
+steg      payload in an image          T1027.003
+spoof     rename / PPID / command line T1036.005, T1134.004, T1564.010
+delay     sleep / environment check    T1497.003, T1482
+antivm    debugger / VM / sandbox      T1497.001, T1622
+```
+
+**One verb, not one verb per technique.** The server sends
+`CAP|<cmd_id>|<technique>|<arguments>` and the payload looks the name up in
+the table. A verb per technique would mean changing the protocol every time
+something was added, and the two sides would drift apart.
+
+```
+  c2> cap 1 list
+  <- session 1: the capabilities compiled into this build: inject, token,
+     keylog, clip, persist, antifor, recon, lolbin, script, dnstun, steg,
+     spoof, delay, antivm
+
+  c2> cap 1 recon sysinfo
+  <- session 1: host=DESKTOP-TD3A3HK os=6.2.9200 build=9200 arch=9 cpus=24
+```
+
+The bounds are the same as the rest of the lab and they are stated in the
+source: the injection targets a process the operator names, the port scan
+touches one named host, the persistence writes a key or a subscription on
+the lab machine with the removal command in the report, and the keylogger
+records keys typed into the lab VM. Nothing scans for targets, harvests a
+list of credentials to try elsewhere, or reaches off the machine.
+
+---
+
 ## Ground rules
 
 Enforced across every phase, not just stated.
@@ -43,11 +131,12 @@ Enforced across every phase, not just stated.
 1. **Defender stays on** during measurement. The Defender A/B toggle exists to produce a *documented coverage gap*, and it restores with a 60-second guard task so the VM cannot be left unprotected.
 2. **No fabricated results.** Every number came from an actual run. Where a result is pending, it says pending.
 3. **Structure ≠ execution.** A `/Launch` action is a request. A `VirtualAlloc` is an allocation. Reports keep these apart.
-4. **Bounded scope.** The payload only ever affects its own process. No injection into unrelated processes, no persistence. Credential access and lateral movement exist only as lab-scoped variants with the bounds described below.
+4. **Bounded scope.** The payload only ever affects its own process. No injection into unrelated processes, no persistence. Credential access and lateral movement exist only as lab-scoped variants with the bounds described below. The capability library follows the same rule: every technique names its target explicitly, and nothing sweeps, scans or propagates.
 5. **The baseline stays plain.** The default build has no obfuscation, no AMSI bypass, no ETW unhooking, no encrypted channel and no domain generation -- so it produces the clean baseline telemetry. The evasion techniques exist as separate builds, each measured against that baseline and each paired with a detection. A payload that evades produces no signal to analyse; that is why the SIGNAL arm and the EVASION arm are both needed, and why the finding is about the rule rather than about the payload.
 6. **Cross-validate before trusting.** Every analyzer is checked against an independent implementation.
 7. **Isolated by default.** The research VM is default-deny on egress and cannot reach the home network. The isolation is set up and verified before any payload is placed on the machine.
-8. **Variants are the experiment.** The baseline payload is plain. The variant builds add one capability each -- obfuscated strings, an AMSI bypass, an ETW unhook, an encrypted channel, domain generation, credential access, lateral movement -- and each has a detection written alongside it. The difference in what the endpoint sees is the finding, and the finding is about the RULE, not about the payload.
+8. **Variants are the experiment.** The baseline payload is plain. The variant builds add one capability each -- obfuscated strings, an AMSI bypass, an ETW unhook, an encrypted channel, domain generation, credential access, lateral movement, file transfer, the technique library -- and each has a detection written alongside it. The difference in what the endpoint sees is the finding, and the finding is about the RULE, not about the payload.
+9. **A gap is a finding.** The catalogue says which techniques the lab does not exercise and which rules have never been watched to fire. A lab that reports only its successes is a brochure.
 
 ---
 
@@ -66,6 +155,9 @@ encrypt    the C2 channel is encrypted, so the protocol is not on the wire
 dga        the C2 address is a generated hostname that changes daily
 cred       credential access against the lab VM
 lateral    movement to a second lab host
+resilient  reconnects with backoff when the network changes under it
+xfer       file download and screen capture
+caps       the capability library -- fourteen techniques, one at a time
 full       everything at once -- the worst case a defender has to catch
 ```
 
@@ -143,6 +235,12 @@ really detecting the technique -- it was detecting a string.
 The rules are structured data, not text, so the Sigma output and the
 machine-readable form come from one definition and cannot drift.
 
+A rule can say **two** things at once. A single selection block ORs its
+matchers, so it can only ever say "one of these fields matched" -- which is
+not enough for a rule like "a remote write *into a process*". The second
+block, `selection_and`, is ANDed with the first, and it is what keeps the
+rules from being noise generators.
+
 ### Two capabilities are bounded on purpose
 
 **Credential access collects, but the secret material does not go on the
@@ -172,7 +270,7 @@ actually needs rather than for what is fashionable:
 | `px_payload.exe` | **C** (freestanding) | It is reflectively mapped by hand. A CRT startup needs a TLS index that only the Windows loader assigns, so the payload cannot link one. See the bug list below. |
 | `px_loader.exe` | **C** | Same reason: it maps another PE by hand and must not depend on loader state. |
 | `px_hollow.exe` | **C** | Same. |
-| the variant modules | **C** | `px_amsi.c`, `px_etw.c`, `px_crypt.c`, `px_dga.c`, `px_cred.c`, `px_lateral.c`, `px_obfuscate.c`. Each is a no-op when its capability is not compiled in, so the baseline binary genuinely does not contain the capability. |
+| the variant modules | **C** | `px_amsi.c`, `px_etw.c`, `px_crypt.c`, `px_dga.c`, `px_cred.c`, `px_lateral.c`, `px_obfuscate.c`, `px_capabilities.c`, `px_file.c`. Each is a no-op when its capability is not compiled in, so the baseline binary genuinely does not contain the capability. |
 | `px_c2.exe` | **Go** | The operator side. One static binary with no runtime dependency, cross-compiles to Linux for the Kali rig, and speaks the same wire protocol so the C payload is unchanged. |
 | `px_pdfscan.exe` | **Rust** | The independent PDF scanner. Reads hostile input, so memory safety is worth having, and it must run on the VM where Python may not be installed. |
 | `px_detect.exe` | **Rust** | The detection rule generator. No crates, so it builds offline and there is nothing to audit but the source. |
@@ -185,6 +283,15 @@ code nobody in the lab has read. The DEFLATE decoder and the SHA-256
 implementation are written out in the source for that reason, and the
 SHA-256 is checked against the FIPS 180-4 test vectors in its own test
 module.
+
+**One rule for the freestanding C: no stack frame may exceed one page.**
+The payload links no CRT and the build raises the stack-probe threshold, so
+the compiler never emits the `__chkstk` call that would grow the stack
+safely. The Windows stack grows one page per fault, and the kernel refuses
+to grow it further -- so a frame larger than a page kills the process at the
+first call made inside it. Every buffer of 1024 bytes or more therefore
+lives in static storage. The rule and its reasoning are written next to the
+`__chkstk` stub in `px_payload.c`.
 
 ---
 
@@ -235,8 +342,9 @@ then Mark-of-the-Web, then the Sysmon check.
 phase7_detection/  Sigma rules for the chain, generated by px_detect.exe
 ```
 
-The rules key on what is observable. A payload that evades produces no
-signal to analyse, which would defeat the purpose of a detection study.
+Fifty rules and a catalogue of ninety-three techniques. The rules key on
+what is observable: a payload that evades produces no signal to analyse,
+which would defeat the purpose of a detection study.
 
 See `phase7_detection/README.md`.
 
@@ -286,6 +394,8 @@ phantom-x/
 │   │   ├── px_dga.c                 domain generation variant
 │   │   ├── px_cred.c                credential access variant
 │   │   ├── px_lateral.c             lateral movement variant
+│   │   ├── px_capabilities.c        the capability library -- 14 techniques
+│   │   ├── px_file.c                file download and screen capture
 │   │   ├── px_variant.h             the interface the variants share
 │   │   ├── tools/gen_strings.py     the build-time string encoder
 │   │   ├── ks_vector.c              the keystream vector generator
@@ -309,6 +419,8 @@ phantom-x/
 │   ├── crypt_test.go                the keystream vector test
 │   ├── variants.go                  the capability report
 │   ├── variants_test.go             the variant arm tests
+│   ├── caps_test.go                 the capability library tests
+│   ├── xfer_test.go                 the file transfer and capture tests
 │   ├── dga_dns.py                   the lab DNS helper for the DGA arm
 │   ├── validate_c2_equivalence.py   Go C2 server vs the Python reference
 │   ├── test_c2_integration.py       payload-level integration test
@@ -316,6 +428,8 @@ phantom-x/
 ├── phase6_reports/                  structured JSON reports
 ├── phase7_detection/                DEFENSIVE DELIVERABLE
 │   ├── src/detections.rs            the rules, as data (Sigma + JSON from one source)
+│   ├── src/rules_extra.rs           the rules for the capability library
+│   ├── src/catalog.rs               the technique catalogue
 │   ├── src/main.rs                  px_detect CLI
 │   └── README.md
 ├── phase8_evaluation/               THE LOOP: telemetry -> rules -> findings
@@ -323,7 +437,7 @@ phantom-x/
 │   ├── coverage.py                  the coverage matrix and the gap report
 │   ├── collect_events.ps1           telemetry collection on the VM
 │   ├── make_synthetic_events.py     the evaluator test fixtures
-│   └── test_evaluator.py            153 assertions on the evaluator semantics
+│   └── test_evaluator.py            996 assertions on the evaluator semantics
 ```
 
 ---
@@ -387,11 +501,12 @@ cd phase5_network && go test -v -run TestGoC2Integration .
 | 0 — Network isolation | **Built and verified.** Host-only segment, default-deny egress, live-network verification |
 | 1 — PDF attack surface | Experiment 1 complete (Linux side); Rust cross-check scanner built; VM reader run pending |
 | 2 — Windows memory research | `win_mem_lab.py` built; VM run pending |
-| 3 — Fileless techniques | **Reflective loading working.** Remaining catalogue pending |
+| 3 — Fileless techniques | **Reflective loading working.** Fourteen techniques measured through the capability library; the catalogue's remaining techniques are marked, not hidden |
 | 4 — Defender evaluation | Collector + Sysmon config built and validated; A/B toggle built; VM preparation script built; VM run pending |
 | 5 — Network research | **C2 rig working and tested** in both Python and Go, cross-validated against each other and against the real payload |
 | 6 — Reporting infrastructure | JSON schema established |
-| 7 — Detections | **Sigma rules written** for the chain, with the observation behind each one stated |
+| 7 — Detections | **Fifty rules** for the chain and the capability library, with the observation behind each one stated |
+| 8 — Evaluation | The loop is closed: 996 assertions on the evaluator, and the coverage matrix with its gaps |
 
 ---
 
@@ -424,3 +539,8 @@ been shipped as a result:
 - The server sent a PING before the handshake was complete, because `measureLatency` did not wait for the CAPS report. The payload read the plaintext PING as a frame header and the session died.
 - The Go server's byte-at-a-time reader broke out of the INNER loop on a read error but not the outer one, so it spun forever and never wrote its `session_close` record. The cross-implementation comparison reported it as a difference between the two servers.
 - The obfuscated string table was compiled only into the obfuscated arm, so the other arms' calls to `px_obf_decode` hit a stub that returned nothing -- which is why the encrypted arm had no channel key at all. The table is about what the program can look up at runtime; the obfuscation is about what the compiler puts in the binary. Those are different questions.
+- The plain branch of the payload never initialised the strings for the `CAP`, `DL` and `SHOT` verbs, so every capability was silently ignored in every arm that was not obfuscated. The build was clean, the table was right, and the report would have said the techniques were measured. Found by driving a capability and noticing that no answer came back.
+- The file transfer died with an access violation on a **64KB stack frame**. The payload is built with the stack probe disabled and links no CRT, so every frame has to fit in one page: the Windows stack grows one page per fault and the kernel refuses to grow it further. The frame was not "too big" -- it was fatal, at the first call made inside it. Every large buffer is now static, and the rule is written down next to the `__chkstk` stub.
+- The formatter truncated every `%s` at **1024 characters**, and `send_line` copied every line into a **2KB buffer**. A base64 chunk is about 22KB, so the transfer left the machine short and the server's hash did not match the file that was sent -- with no error anywhere. Three silent corruptions on one path, each of which looked like a hash mismatch rather than a bug.
+- The payload sent the capability mask in **decimal** and the server read it as **hex**. The baseline reports 0 and hides the difference; the credit arm reported 32, which the server read as `0x32`. The variant test now compares the reported mask against what the build should have said, so the next one cannot pass unnoticed.
+- The Go server's quarantine directory was created only at start-up, so a directory assigned after the server was built was never created and every transferred file was silently dropped. The transfer test now checks that the file is on disk, not just that the bytes arrived.

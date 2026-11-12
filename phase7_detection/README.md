@@ -28,11 +28,54 @@ builds a **matrix** of arms, one per capability:
 | `dga` | the C2 address is a generated hostname that changes daily |
 | `cred` | credential access against the lab VM |
 | `lateral` | movement to a second lab host |
+| `resilient` | reconnects with backoff when the network changes under it |
+| `xfer` | file download and screen capture |
+| `caps` | the capability library -- fourteen techniques, one at a time |
 | `full` | everything at once |
 
 **The `full` arm is the one that matters most.** It is the worst case a
 defender has to be able to catch, and it is the arm the detection rules are
 finally validated against.
+
+---
+
+## The technique catalogue
+
+The rules are the half of the story that says what can be **detected**. The
+catalogue is the half that says what the lab can **do** -- and, more
+usefully, what it does not do.
+
+```powershell
+phase7_detection\target\release\px_detect.exe --catalog-summary
+```
+
+```
+  techniques in scope : 93
+  measured            : 54
+  ruled only          : 12
+  not exercised       : 27
+  of which campaigns  : 4
+```
+
+Three statuses:
+
+| Status | What it means |
+|---|---|
+| `measured` | The lab exercises the technique, so the telemetry is real and the rule has been tested against it. |
+| `ruled` | A rule exists, but nobody has watched it fire. A rule that has never fired is a hypothesis. |
+| `not_exercised` | Neither. The lab says nothing about it, and the catalogue says so. |
+
+The **campaigns** -- ransomware, wiper, cryptojacking, botnet -- are listed
+as campaigns rather than techniques. A ransomware run is a hundred
+techniques executed in an order; no single capability in a single binary is
+"ransomware", and pretending otherwise would have made the denominator a
+lie.
+
+The catalogue is structured data in `src/catalog.rs`, and the evaluator's
+test suite checks that every rule it names actually exists and that every
+technique a rule claims to cover is in the catalogue. A catalogue entry that
+names a rule which does not exist would make the coverage matrix claim a
+technique is covered when nothing detects it.
 
 ---
 
@@ -213,10 +256,56 @@ The bits:
 | 0x10 | domain generation |
 | 0x20 | credential access capability present |
 | 0x40 | lateral movement capability present |
+| 0x80 | the technique capability library is compiled in |
+
+The mask is sent as **hex**. It used to be sent as decimal while the server
+read it as hex, and nothing noticed: the baseline reports 0, which is the
+same in both, and the credit arm reported 32, which the server read as
+`0x32`. The variant test now compares the reported mask against what the
+build should have said, so the next one cannot pass unnoticed.
+
+---
+
+## The capability library
+
+Fourteen techniques, one table, one verb.
+
+```
+CAP|<cmd_id>|<technique>|<arguments>
+```
+
+The server sends the command, the payload looks the name up in the table,
+runs it, and answers with a `RESULT` line carrying the command id back. The
+id is what lets the server correlate the answer with the request -- without
+it, two capabilities in flight are indistinguishable.
+
+```
+  c2> cap 1 list
+  <- session 1: the capabilities compiled into this build: inject, token,
+     keylog, clip, persist, antifor, recon, lolbin, script, dnstun, steg,
+     spoof, delay, antivm
+
+  c2> cap 1 recon sysinfo
+  <- session 1: host=DESKTOP-TD3A3HK os=6.2.9200 build=9200 arch=9 cpus=24
+```
+
+The bounds are in the source, next to each technique, and they are the same
+bounds the rest of the lab has: the injection targets a process the operator
+names, the port scan touches one named host, the persistence writes a key or
+a subscription on the lab machine and reports the command that removes it,
+and the keylogger records keys typed into the lab VM.
+
+The library is a **separate build flag**, so the `caps` arm exists alongside
+the baseline and the delta in telemetry is measurable. A capability that is
+not compiled in cannot be detected, and "present but disabled" is not the
+same thing as "not present".
 
 ---
 
 ## The detections
+
+Fifty rules. The first fourteen cover the chain and the original variant
+arms; the rest cover the capability library.
 
 | ID | Rule | Detects |
 |---|---|---|
@@ -226,11 +315,58 @@ The bits:
 | px-012 | High ratio of unique subdomains with NXDOMAIN | the DGA arm |
 | px-013 | Writable and executable page in a signed module | the AMSI and ETW arms |
 | px-014 | Packed or encrypted payload | the obfuscated arm |
+| px-015 | Process opened with all access and thread rights | process injection |
+| px-016 | Memory written in another process | process injection |
+| px-017 | Token of another process duplicated or used | token theft |
+| px-018 | Running image renamed to a known system binary | masquerading |
+| px-019 | Command line does not match the image on disk | argument spoofing |
+| px-020 | Parent process changed after the process started | PPID spoofing |
+| px-021 | Registry Run key written | Run-key persistence |
+| px-022 | WMI event subscription created | fileless persistence |
+| px-023 | Scheduled task created with an inline command | scheduled-task persistence |
+| px-024 | Service created with a binary in a user-writable directory | service persistence |
+| px-025 | Windows event log cleared | log clearing |
+| px-026 | Running image deleted or renamed away | self-deletion |
+| px-027 | File timestamps set far in the past | timestomp |
+| px-028 | Clipboard read or replaced | clipboard monitoring |
+| px-029 | Screen capture bitmap written by a non-shell process | screen capture |
+| px-030 | Camera or microphone opened by an unusual process | webcam and microphone |
+| px-031 | System information gathered by a non-administrative tool | reconnaissance |
+| px-032 | Connections to many ports on one host | port scanning |
+| px-033 | Signed script host running a script from a user directory | script host abuse |
+| px-034 | System binary proxy execution | living off the land |
+| px-035 | Encoded command line | encoding |
+| px-036 | DNS query carrying data in the subdomain | DNS tunnelling |
+| px-037 | File staged and sent to a remote listener | file transfer |
+| px-038 | Data appended after the end of an image file | steganography |
+| px-039 | Process checks for a debugger before doing its work | anti-analysis |
+| px-040 | Process waits before it does anything | delayed execution |
+| px-041 | Process checks whether the machine is domain joined | environment-aware execution |
+| px-042 | Security account manager hive opened | credential access, hive method |
+| px-043 | Credential material read out of the LSASS process | credential access, memory method |
+| px-044 | Data staged and compressed before it leaves | data staging |
+| px-045 | AmsiScanBuffer overwritten in memory | the AMSI bypass, by name |
+| px-046 | EtwEventWrite patched to return immediately | the ETW unhook, by name |
+| px-047 | Office application spawning a script host or a shell | macro execution |
+| px-048 | Malicious object linked from a document | malicious OLE |
+| px-049 | Keyboard input state polled by a non-shell process | keylogging |
+| px-050 | Remote service created over the network | remote execution |
 
 The rules are written so that they key on **behaviour**, not on a
 string. That is deliberate: a rule that keys on a string stops working
 the moment the string is encoded, and a rule that keys on behaviour keeps
 working.
+
+### Two blocks
+
+A selection block ORs its matchers, so it can only ever say "one of these
+fields matched". A rule that needs "a remote write *into a process* rather
+than a remote write somewhere" needs two blocks, and the second one is
+`selection_and`, which is ANDed with the first.
+
+Most rules need only one block, because the most characteristic field is
+enough on its own -- and that is the better rule, since every extra
+condition is another chance for the rule to miss.
 
 ---
 
