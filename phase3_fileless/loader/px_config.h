@@ -112,6 +112,8 @@
 #define PX_CAP_DGA         0x10
 #define PX_CAP_CRED        0x20
 #define PX_CAP_LATERAL     0x40
+/*   0x80  the technique capability library is compiled in               */
+#define PX_CAP_LIBRARY     0x80
 
 #define PX_CAP_MASK                                                     \
     ((PX_OBFUSCATE    ? PX_CAP_OBFUSCATED  : 0) |                              \
@@ -120,7 +122,8 @@
      (PX_ENCRYPT      ? PX_CAP_ENCRYPTED   : 0) |                              \
      (PX_DGA          ? PX_CAP_DGA         : 0) |                              \
      (PX_CRED_ACCESS  ? PX_CAP_CRED        : 0) |                              \
-     (PX_LATERAL      ? PX_CAP_LATERAL     : 0))
+     (PX_LATERAL      ? PX_CAP_LATERAL     : 0) |                              \
+     (PX_CAPABILITIES ? PX_CAP_LIBRARY     : 0))
 
 /* ================================================================== */
 /* Encryption                                                           */
@@ -143,6 +146,20 @@
 
 #ifndef PX_DEFAULT_XOR_KEY
 #define PX_DEFAULT_XOR_KEY "phantomx-lab-key-0123456789abcdef"
+#endif
+
+/* The largest protocol line the payload sends or receives.
+ *
+ * A file transfer puts a base64 chunk in one line: 16KB of raw bytes
+ * becomes about 22KB of base64. Every line buffer has to be able to
+ * hold that, and the encrypted arm's frame buffer has to hold the line
+ * plus its four-byte length prefix.
+ *
+ * The limit is not arbitrary: it is what the C2 server accepts as a
+ * frame (1 MiB), so the payload can never produce a frame the server
+ * would refuse. */
+#ifndef PX_MAX_LINE
+#define PX_MAX_LINE (64 * 1024)
 #endif
 
 /* ================================================================== */

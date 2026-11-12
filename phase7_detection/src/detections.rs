@@ -119,6 +119,16 @@ pub struct Rule {
     pub logsource: Vec<(&'static str, &'static str)>,
     /// The matchers that select the event.
     pub selection: Block,
+    /// A second block that must ALSO match.
+    ///
+    /// The matchers inside a block are OR'd, so a single block can only
+    /// ever say "one of these fields matched". A rule that needs "this
+    /// field AND that field" -- a remote write INTO a process, rather
+    /// than a remote write somewhere -- needs two blocks.
+    ///
+    /// In Sigma this is the list-of-maps form: the blocks are separate
+    /// lists and the condition ANDs them together.
+    pub selection_and: Block,
     /// The matchers that exclude the event. A rule with a filter fires
     /// when the selection matches and the filter does not.
     pub filter: Block,
@@ -151,10 +161,16 @@ impl Rule {
         }
         out.push_str("detection:\n");
         out.push_str(&self.render_block("selection", &self.selection));
+        if !self.selection_and.matchers.is_empty() {
+            out.push_str(&self.render_block("selection_and", &self.selection_and));
+        }
         if !self.filter.matchers.is_empty() {
             out.push_str(&self.render_block("filter", &self.filter));
         }
         out.push_str("condition: selection");
+        if !self.selection_and.matchers.is_empty() {
+            out.push_str(" and selection_and");
+        }
         if !self.filter.matchers.is_empty() {
             out.push_str(" and not filter");
         }
@@ -227,6 +243,9 @@ impl Rule {
         }
         out.push_str("},\n");
         out.push_str(&self.block_json("selection", &self.selection));
+        if !self.selection_and.matchers.is_empty() {
+            out.push_str(&self.block_json("selection_and", &self.selection_and));
+        }
         if !self.filter.matchers.is_empty() {
             out.push_str(&self.block_json("filter", &self.filter));
         }
@@ -301,7 +320,7 @@ fn json_str(s: &str) -> String {
 
 /// The rule set.
 pub fn rules() -> Vec<Rule> {
-    vec![
+    let mut all = vec![
         // ------------------------------------------------------------------
         // The baseline rules.
         //
@@ -328,6 +347,7 @@ a section-protection pass over the mapped image.",
             },
             filter: Block { matchers: vec![Matcher::one("IntegrityLevel", Op::Equals, "System")] },
             fields: &["Image", "CommandLine", "ParentImage", "IntegrityLevel", "User"],
+            selection_and: Block { matchers: vec![] },
             catches: "the loader and the payload, on every arm",
         },
         Rule {
@@ -349,6 +369,7 @@ expected process; anything else is worth a look.",
             },
             filter: Block { matchers: vec![] },
             fields: &["Image", "CommandLine", "ParentImage", "User"],
+            selection_and: Block { matchers: vec![] },
             catches: "the loader, on every arm",
         },
         Rule {
@@ -367,6 +388,7 @@ RESULT frame is the strongest indicator.",
             },
             filter: Block { matchers: vec![] },
             fields: &["DestinationIp", "DestinationPort", "SourceIp", "Image", "Protocol"],
+            selection_and: Block { matchers: vec![] },
             catches: "the BASELINE arm only -- the encrypted arm hides this",
         },
         Rule {
@@ -387,6 +409,7 @@ inside a PDF as an embedded file. The PHANTOM-X carrier embeds the payload as an
             },
             filter: Block { matchers: vec![] },
             fields: &["Image", "CommandLine", "ParentImage", "ParentCommandLine"],
+            selection_and: Block { matchers: vec![] },
             catches: "the loader, on every arm",
         },
         Rule {
@@ -404,6 +427,7 @@ target process and writes a mapped image into its address space.",
             },
             filter: Block { matchers: vec![] },
             fields: &["Image", "CommandLine", "ParentImage", "OriginalFileName"],
+            selection_and: Block { matchers: vec![] },
             catches: "the hollow tool",
         },
         Rule {
@@ -421,6 +445,7 @@ the extension is pointed at it.",
             },
             filter: Block { matchers: vec![] },
             fields: &["TargetObject", "Details", "Image"],
+            selection_and: Block { matchers: vec![] },
             catches: "the file-association step, on every arm",
         },
         Rule {
@@ -443,6 +468,7 @@ leaves the machine unprotected is a finding, not a convenience.",
             },
             filter: Block { matchers: vec![] },
             fields: &["ScriptBlockText", "Path", "User"],
+            selection_and: Block { matchers: vec![] },
             catches: "the lab's own A/B toggle -- a rule about the RESEARCHER",
         },
         Rule {
@@ -465,6 +491,7 @@ the machine was left unprotected.",
             },
             filter: Block { matchers: vec![] },
             fields: &["Image", "CommandLine", "ParentImage"],
+            selection_and: Block { matchers: vec![] },
             catches: "the lab's own restore guard",
         },
 
@@ -506,6 +533,7 @@ property that makes it worth having.",
                 ],
             },
             fields: &["SourceImage", "TargetImage", "GrantedAccess", "CallTrace"],
+            selection_and: Block { matchers: vec![] },
             catches: "the credential arm",
         },
         Rule {
@@ -530,6 +558,7 @@ that initiated it, which is why a single-host lab cannot see this at all.",
             },
             filter: Block { matchers: vec![] },
             fields: &["ServiceName", "ImagePath", "AccountName", "ServiceFileName"],
+            selection_and: Block { matchers: vec![] },
             catches: "the lateral arm, on the TARGET host",
         },
         Rule {
@@ -559,6 +588,7 @@ the finding the comparison is meant to produce.",
             },
             filter: Block { matchers: vec![] },
             fields: &["DestinationIp", "DestinationPort", "SourceIp", "Image", "Protocol"],
+            selection_and: Block { matchers: vec![] },
             catches: "the encrypted arm",
         },
         Rule {
@@ -583,6 +613,7 @@ logsource from the others.",
             },
             filter: Block { matchers: vec![] },
             fields: &["QueryName", "QueryResults", "Image"],
+            selection_and: Block { matchers: vec![] },
             catches: "the DGA arm",
         },
         Rule {
@@ -611,6 +642,7 @@ technique applied to two different functions.",
             },
             filter: Block { matchers: vec![] },
             fields: &["SourceImage", "TargetImage", "GrantedAccess", "CallTrace"],
+            selection_and: Block { matchers: vec![] },
             catches: "the AMSI and ETW arms -- without needing ETW",
         },
         Rule {
@@ -636,7 +668,13 @@ rule that survives.",
             },
             filter: Block { matchers: vec![] },
             fields: &["TargetFilename", "Image", "Signature", "SignatureStatus"],
+            selection_and: Block { matchers: vec![] },
             catches: "the obfuscated arm",
         },
-    ]
+    ];
+
+    // The rules for the capability library. They are kept in their own
+    // module because there are a lot of them and they were written
+    // against a different list of techniques.
+    all.extend(crate::rules_extra::capability_rules());    all
 }

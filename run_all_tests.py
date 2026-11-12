@@ -229,7 +229,8 @@ def test_variants() -> Result:
 
     try:
         for arm in ("baseline", "obfuscate", "amsi", "etw", "encrypt",
-                    "dga", "cred", "lateral", "resilient", "full"):
+                    "dga", "cred", "lateral", "resilient", "xfer",
+                    "caps", "full"):
             exe = os.path.join(variants_dir, f"px_payload_{arm}.exe")
             if not os.path.isfile(exe):
                 detail.append(f"{arm}=missing")
@@ -375,6 +376,55 @@ def test_evaluator() -> Result:
     return Result(name, ok, detail, 0.0)
 
 
+def test_capability_and_transfer() -> Result:
+    """The capability library and the file transfer, against the real payload.
+
+    These are the checks that would have caught the two bugs that made
+    the capabilities silently dead: the capability library was not
+    compiled into any arm the suite exercised, and the file transfer
+    died on a stack frame larger than a page.
+
+    A capability that does not work is worse than one that is missing,
+    because the report says it was measured.
+    """
+    name = "capability library and file transfer"
+    go = find_tool("go.exe", r"%ProgramFiles%\Go\bin\go.exe")
+    if not go:
+        return Result(name, False, "Go toolchain not found", 0.0)
+
+    caps = os.path.join(ROOT, "dist", "variants", "px_payload_caps.exe")
+    xfer = os.path.join(ROOT, "dist", "variants", "px_payload_xfer.exe")
+    if not os.path.isfile(caps) or not os.path.isfile(xfer):
+        return Result(name, False,
+                      "no caps or xfer build (run build_variants.ps1)", 0.0)
+
+    t0 = time.time()
+    ok = True
+    detail = []
+
+    for exe, pattern in ((caps, "TestCapability"),
+                          (xfer, "TestFileTransfer|TestScreenCapture")):
+        p = subprocess.run(
+            [go, "test", "-count=1", "-timeout", "300s", "-v",
+             "-run", pattern, "-variant", exe, "."],
+            cwd=os.path.join(ROOT, "phase5_network"),
+            capture_output=True, text=True, timeout=600,
+        )
+        out = (p.stdout or "") + (p.stderr or "")
+        if "--- FAIL" in out:
+            detail.append(f"{os.path.basename(exe)}=FAIL")
+            ok = False
+        elif "--- PASS" in out:
+            detail.append(f"{os.path.basename(exe)}=pass")
+        elif "--- SKIP" in out:
+            detail.append(f"{os.path.basename(exe)}=skip")
+        else:
+            detail.append(f"{os.path.basename(exe)}=unknown")
+            ok = False
+
+    return Result(name, ok, ", ".join(detail), time.time() - t0)
+
+
 def test_pypdf() -> Result:
     """The PDF inspector against pypdf, if it is installed."""
     name = "PDF inspector vs pypdf"
@@ -425,6 +475,7 @@ def main(argv=None) -> int:
     ]
     if not args.quick:
         tests += [test_variants, test_resilient_reconnect, test_evaluator,
+                  test_capability_and_transfer,
                   test_pypdf, test_sysmon_schema]
 
     results = []

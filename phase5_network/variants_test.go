@@ -134,6 +134,75 @@ func TestVariantCapabilities(t *testing.T) {
 		t.Fatalf("capability mask 0x%02x produced no names", sess.capabilities)
 	}
 	t.Logf("capability names: %v", names)
+
+	// The mask must be EXACTLY the one this arm should report.
+	//
+	// This is the check that catches the bug where the payload sends
+	// the mask in decimal and the server reads it as hex: the baseline
+	// reports 0 and hides the difference, and the credit arm reports
+	// 32, which the server reads as 0x32. Every arm looked fine because
+	// nothing compared the number against what the build should have
+	// said.
+	if want, ok := expectedMaskFor(payload); ok {
+		if sess.capabilities != want {
+			t.Fatalf("arm %q reported mask 0x%02x, expected 0x%02x",
+				armNameFor(payload), sess.capabilities, want)
+		}
+	}
+}
+
+// armNameFor extracts the arm name from a variant binary's file name.
+//
+// The build matrix names every arm "px_payload_<arm>.exe", so the file
+// name is the arm's identity.
+func armNameFor(payload string) string {
+	base := filepath.Base(payload)
+	base = strings.TrimSuffix(base, ".exe")
+	return strings.TrimPrefix(base, "px_payload_")
+}
+
+// expectedMaskFor is the capability mask each arm is built to report.
+//
+// The table is the build matrix in one place, and it is the thing the
+// server compares the reported mask against. Without it, a payload that
+// reported the wrong mask would still pass every test, because the only
+// checks were "the mask is not empty" and "the mask has names".
+func expectedMaskFor(payload string) (uint32, bool) {
+	switch armNameFor(payload) {
+	case "baseline":
+		return 0, true
+	case "obfuscate":
+		return CapObfuscated, true
+	case "amsi":
+		return CapAMSI, true
+	case "etw":
+		return CapETW, true
+	case "encrypt":
+		return CapEncrypted, true
+	case "dga":
+		return CapDGA, true
+	case "cred":
+		return CapCred, true
+	case "lateral":
+		return CapLateral, true
+	case "caps":
+		return CapLibrary, true
+	case "xfer":
+		// The transfer arm has no bit of its own: it is the plain
+		// channel with the file-transfer and screen-capture code
+		// compiled in, and the server has no reason to treat it as a
+		// different arm.
+		return 0, true
+	case "resilient":
+		// The resilient arm is the plain channel with a reconnect
+		// loop. It looks the same on the wire, and that is the point:
+		// the reconnect is invisible until it happens.
+		return 0, true
+	case "full":
+		return CapObfuscated | CapAMSI | CapETW | CapEncrypted |
+			CapDGA | CapCred | CapLateral | CapLibrary, true
+	}
+	return 0, false
 }
 
 // TestVariantEncryptedChannel drives the encrypted-channel variant.

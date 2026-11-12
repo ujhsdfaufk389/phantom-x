@@ -288,6 +288,17 @@ func TestScreenCapture(t *testing.T) {
 // given kind.
 func findAuditRecord(t *testing.T, path, kind string) map[string]any {
 	t.Helper()
+	return findAuditRecordWhere(t, path, kind, "", "")
+}
+
+// findAuditRecordWhere reads the audit log and returns the first record
+// of the given kind whose named field equals the wanted value.
+//
+// The field check matters when a run produces several records of the
+// same kind: the capability test runs two techniques, and "the first
+// capability record" would be the wrong one.
+func findAuditRecordWhere(t *testing.T, path, kind, field, want string) map[string]any {
+	t.Helper()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
@@ -300,7 +311,13 @@ func findAuditRecord(t *testing.T, path, kind string) map[string]any {
 		if err := json.Unmarshal([]byte(line), &rec); err != nil {
 			continue
 		}
-		if rec["kind"] == kind {
+		if rec["kind"] != kind {
+			continue
+		}
+		if field == "" {
+			return rec
+		}
+		if v, ok := rec[field].(string); ok && v == want {
 			return rec
 		}
 	}

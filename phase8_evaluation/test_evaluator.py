@@ -104,6 +104,23 @@ def test_rule_semantics():
     nofilter = {"id": "t", "selection": [matcher("Image", "endswith", "x")]}
     check("no filter", rule_fires(nofilter, {"Image": "x"}), True)
 
+    # The AND block. A rule with one is narrower, and the narrowing is
+    # the whole reason the block exists: without it the rule would fire
+    # on every event with a CallTrace.
+    andrule = {
+        "id": "t",
+        "selection": [matcher("CallTrace", "contains", "WriteProcessMemory")],
+        "selection_and": [matcher("TargetImage", "endswith", "\\lsass.exe")],
+    }
+    check("and block matches",
+          rule_fires(andrule, {"CallTrace": "WriteProcessMemory",
+                               "TargetImage": "C:\\W\\lsass.exe"}), True)
+    check("and block blocks",
+          rule_fires(andrule, {"CallTrace": "WriteProcessMemory",
+                               "TargetImage": "C:\\W\\notepad.exe"}), False)
+    check("and block needs the selection too",
+          rule_fires(andrule, {"TargetImage": "C:\\W\\lsass.exe"}), False)
+
 
 def test_backslash_paths():
     """A path with backslashes must survive the JSON round trip.
@@ -192,13 +209,120 @@ def test_real_rules_parse():
         check("a reader does not fire px-001", "px-001" in fired2, False)
 
 
+def test_synthetic_arms():
+    """Every synthetic arm must fire its own rules, and only its own.
+
+    This is the check that keeps a rule from being a noise generator.
+
+    A rule that fires on every event of every arm is not a detection; it
+    is a line of noise in the report. And a rule that fires on nothing
+    is a rule that will never be found in production. Both failures are
+    silent, so they are checked here rather than being noticed later.
+    """
+    exe = os.path.join(HERE, "..", "phase7_detection", "target", "release",
+                       "px_detect.exe")
+    if not os.path.isfile(exe):
+        exe = os.path.join(HERE, "..", "phase7_detection", "target", "release",
+                           "px_detect")
+    if not os.path.isfile(exe):
+        print("  SKIP the synthetic arms test: px_detect is not built")
+        return
+
+    sys.path.insert(0, HERE)
+    from make_synthetic_events import ARMS
+
+    with tempfile.TemporaryDirectory() as td:
+        rpath = os.path.join(td, "rules.json")
+        with open(rpath, "wb") as fh:
+            subprocess.run([exe, "--emit", "json"], stdout=fh, check=True)
+
+        from px_eval import load_json
+        rules = load_json(rpath)
+
+        # The rules that are allowed to fire on more than one arm: the
+        # ones that describe the chain itself, which every arm inherits.
+        shared = {"px-001", "px-003", "px-004", "px-006", "px-009",
+                  "px-010", "px-011", "px-012", "px-013", "px-014"}
+
+        for arm, (events, expected) in ARMS.items():
+            fired = {r["id"] for r in rules
+                     for ev in events if rule_fires(r, ev)}
+            for rid in expected:
+                check(f"{arm}: {rid} fires", rid in fired, True)
+
+            # Nothing else that belongs to another arm may fire here.
+            others = set()
+            for other_arm, (_, other_expected) in ARMS.items():
+                if other_arm == arm:
+                    continue
+                others |= set(other_expected)
+            for rid in sorted(fired - set(expected) - shared - others):
+                check(f"{arm}: {rid} does not fire", rid in fired, False)
+
+
+def test_catalog():
+    """The catalogue must be well formed, and its rules must exist.
+
+    A catalogue entry that names a rule which does not exist is a lie:
+    it would make the coverage matrix claim a technique is covered when
+    nothing detects it.
+    """
+    exe = os.path.join(HERE, "..", "phase7_detection", "target", "release",
+                       "px_detect.exe")
+    if not os.path.isfile(exe):
+        exe = os.path.join(HERE, "..", "phase7_detection", "target", "release",
+                           "px_detect")
+    if not os.path.isfile(exe):
+        print("  SKIP the catalogue test: px_detect is not built")
+        return
+
+    with tempfile.TemporaryDirectory() as td:
+        cpath = os.path.join(td, "catalog.json")
+        rpath = os.path.join(td, "rules.json")
+        with open(cpath, "wb") as fh:
+            subprocess.run([exe, "--emit", "catalog"], stdout=fh, check=True)
+        with open(rpath, "wb") as fh:
+            subprocess.run([exe, "--emit", "json"], stdout=fh, check=True)
+
+        from px_eval import load_json
+        catalog = load_json(cpath)
+        rules = load_json(rpath)
+        rule_ids = {r["id"] for r in rules}
+
+        check("catalogue is not empty", len(catalog) > 50, True)
+        check("catalogue covers the lab's techniques",
+              len({t["id"] for t in catalog}) == len(catalog), True)
+
+        for t in catalog:
+            check(f"{t['id']} has a tactic", bool(t.get("tactic")), True)
+            check(f"{t['id']} has a name", bool(t.get("name")), True)
+            check(f"{t['id']} has a status",
+                  t.get("status") in ("measured", "ruled", "not_exercised"), True)
+            check(f"{t['id']} has a kind",
+                  t.get("kind") in ("technique", "campaign"), True)
+            check(f"{t['id']} has telemetry", bool(t.get("telemetry")), True)
+
+            for rid in [x.strip() for x in t.get("rules", "").split(",") if x.strip()]:
+                check(f"{t['id']} names a rule that exists ({rid})",
+                      rid in rule_ids, True)
+
+        # Every technique the rules cover must also be in the catalogue.
+        # A rule for a technique that the catalogue does not mention is
+        # a rule the coverage matrix will never account for.
+        in_catalog = {t["id"] for t in catalog}
+        for r in rules:
+            for tech in r.get("techniques", []):
+                check(f"{r['id']} technique {tech} is in the catalogue",
+                      tech.strip() in in_catalog, True)
+
+
 def main() -> int:
     print("=" * 60)
     print("PHANTOM-X :: EVALUATOR TESTS")
     print("=" * 60)
     for fn in (test_matching, test_blocks, test_rule_semantics,
                test_backslash_paths, test_evaluate_counts,
-               test_real_rules_parse):
+               test_real_rules_parse, test_synthetic_arms, test_catalog):
         print(f"  {fn.__name__}")
         fn()
     print()

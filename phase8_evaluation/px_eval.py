@@ -27,11 +27,20 @@ WHY THIS EXISTS
 THE SEMANTICS
     A rule fires on an event when:
 
-        the SELECTION matches, AND the FILTER does not match
+        the SELECTION matches, AND the SELECTION_AND matches, AND the
+        FILTER does not match
 
     Within a selection block the matchers are OR'd -- the usual Sigma
     meaning, where several fields under one key match if ANY of them
     matches. Between blocks they are AND'd.
+
+    WHY THERE ARE TWO SELECTION BLOCKS
+        A single block ORs its matchers, so it can only ever say that one
+        of its fields matched. A rule that needs a remote write INTO a
+        process, rather than a remote write somewhere, needs two blocks,
+        and the second one is selection_and. Without it the rule would
+        fire on every event that had a CallTrace at all, which is not a
+        rule so much as a noise generator.
 
     This mirrors the Sigma specification rather than the intuition, which
     matters: a rule that means something different from its Sigma text is
@@ -138,11 +147,24 @@ def match_block(event: dict, block: list) -> bool:
 
 
 def rule_fires(rule: dict, event: dict) -> bool:
-    """Does a rule fire on an event?"""
+    """Does a rule fire on an event?
+
+    A rule fires when the SELECTION matches, the SELECTION_AND block
+    also matches, and the FILTER does not match.
+
+    The selection_and block is the second half of the AND. A single
+    selection block ORs its matchers, so it can only ever say "one of
+    these fields matched". A rule that needs "a remote write INTO a
+    process, rather than a remote write somewhere" needs two blocks,
+    and that is what selection_and is for.
+    """
     selection = rule.get("selection", [])
+    selection_and = rule.get("selection_and", [])
     filt = rule.get("filter", [])
 
     if not match_block(event, selection):
+        return False
+    if selection_and and not match_block(event, selection_and):
         return False
     if filt and match_block(event, filt):
         return False

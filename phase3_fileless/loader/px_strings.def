@@ -63,7 +63,7 @@
     X(TXT_NO_CRED_DATA, "credential collection returned no data")          \
     X(TXT_NO_CRED, "this build has no credential access capability")       \
     X(TXT_NO_LATERAL, "this build has no lateral movement capability")      \
-    X(TXT_CAPS_MASK, "CAPS|%lu")                                            \
+    X(TXT_CAPS_MASK, "CAPS|%lx")                                            \
     X(TXT_HELLO_FMT, "HELLO|%s|%lu|%s")                                    \
     X(TXT_RESULT_FMT, "RESULT|%s|%s|%ld")                                  \
     X(TXT_MARKER_FMT, "px_payload executed\r\n  pid  : %lu\r\n  host : %s\r\n  time : %04lu-%02lu-%02lu %02lu:%02lu:%02lu\r\n")\
@@ -80,7 +80,7 @@
     X(TXT_CRED_BLOCKS, "cred_blocks=%d sample=%s")                          \
     X(TXT_NO_RESOLVE, "cannot resolve %s\n")                               \
     X(TXT_EXEC_FMT, "EXEC %s : %s\n")                                       \
-    X(TXT_CAPS_FMT, "CAPS|%lu")                                            \
+    X(TXT_CAPS_FMT, "CAPS|%lx")                                            \
     X(TXT_MARKER_NAME, "px_payload_running.txt")                            \
     X(TXT_LOG_NAME, "px_payload_log.txt")                                   \
     X(TXT_PING_REPLY, "PONG")                                               \

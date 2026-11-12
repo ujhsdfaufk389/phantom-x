@@ -56,6 +56,10 @@ const (
 	CapDGA        = 0x10
 	CapCred       = 0x20
 	CapLateral    = 0x40
+	// The technique capability library. It is not a technique itself,
+	// but an arm that carries the library must be distinguishable from
+	// the baseline, or the two runs cannot be compared.
+	CapLibrary = 0x80
 )
 
 // CapabilityNames renders the mask as a readable list, for the audit log.
@@ -77,6 +81,7 @@ func CapabilityNames(mask uint32) []string {
 	add(CapDGA, "domain_generation")
 	add(CapCred, "credential_access")
 	add(CapLateral, "lateral_movement")
+	add(CapLibrary, "capability_library")
 	return out
 }
 

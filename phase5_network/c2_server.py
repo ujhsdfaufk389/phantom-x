@@ -90,6 +90,7 @@ CAP_BITS = (
     (0x10, "domain_generation"),
     (0x20, "credential_access"),
     (0x40, "lateral_movement"),
+    (0x80, "capability_library"),
 )
 
 

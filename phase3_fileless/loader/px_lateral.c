@@ -79,7 +79,7 @@
 int px_lateral_move(const char *host, char *report, unsigned int cap)
 {
     char schtasks[64];
-    char cmd[1024];
+    static char cmd[1024];
     unsigned int n;
 
     if (cap == 0)
@@ -119,7 +119,7 @@ int px_lateral_move(const char *host, char *report, unsigned int cap)
         /* The command is run and its output captured, so that the
          * operator can see whether it worked. The output is the
          * Windows error text, which is the useful part. */
-        char out[1024];
+        static char out[1024];
         long rc = -1;
         char *result = px_run_capture(cmd, out, sizeof(out), &rc);
 

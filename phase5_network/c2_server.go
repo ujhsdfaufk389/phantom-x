@@ -762,7 +762,13 @@ func (s *Server) handleLine(sess *Session, line string) {
 		if s.quarantineDir != "" {
 			name := fmt.Sprintf("transfer_%s_%s.bin", cmdID, digest[:16])
 			path = filepath.Join(s.quarantineDir, name)
-			if err := os.WriteFile(path, t.data, 0o600); err != nil {
+			// The directory is created here rather than at start-up,
+			// because the field can be set after the server is built.
+			// Without this the write fails, the path is dropped, and
+			// the operator is left wondering where the file went.
+			if err := os.MkdirAll(s.quarantineDir, 0o700); err != nil {
+				path = ""
+			} else if err := os.WriteFile(path, t.data, 0o600); err != nil {
 				path = ""
 			}
 		}

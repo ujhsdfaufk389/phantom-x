@@ -87,7 +87,7 @@ static int px_send_chunk(PX_SOCKET sock, fn_send p_send,
                           unsigned int len)
 {
     char *b64;
-    char line[65536];
+    static char line[PX_MAX_LINE];
     px_size_t n;
 
     b64 = b64_encode(data, (px_size_t)len);
