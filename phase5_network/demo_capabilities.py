@@ -129,6 +129,10 @@ def main(argv=None) -> int:
         xfer_commands = []
     else:
         cap_commands = [
+            "list",
+            "exec 1 whoami",
+            "exec 1 ver",
+            "exec 1 echo PHANTOMX_REMOTE_SHELL_WORKS",
             "cap 1 list",
             "cap 1 recon sysinfo",
             "cap 1 service",
@@ -164,6 +168,7 @@ def _session(server, payload, port, audit, quarantine, work, label,
              commands) -> None:
     """Run one session: server, payload, commands, then shut both down."""
     payload_log = os.path.join(work, f"payload_{label}.txt")
+    server_log = os.path.join(work, f"server_{label}.txt")
 
     srv = subprocess.Popen(
         [server, "--host", "127.0.0.1", "--port", str(port),
@@ -205,14 +210,47 @@ def _session(server, payload, port, audit, quarantine, work, label,
                 fh.write(out)
         srv.terminate()
         try:
+            sout, _ = srv.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            srv.kill()
+            sout, _ = srv.communicate()
+        if sout:
+            with open(server_log, "w", encoding="utf-8") as fh:
+                fh.write(sout)
+        srv.terminate()
+        try:
             srv.wait(timeout=5)
         except subprocess.TimeoutExpired:
             srv.kill()
 
+    _print_server_log(server_log)
     _print_payload_log(payload_log)
     print()
     print(f"  the audit log and the quarantine directory are in: {work}")
     return 0
+
+
+def _print_server_log(path: str) -> None:
+    """The operator's console.
+
+    This is what the person at the keyboard sees: the command they typed,
+    and the output that came back from the Windows machine.
+    """
+    if not os.path.isfile(path):
+        return
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        lines = [ln.rstrip() for ln in fh if ln.strip()]
+    if not lines:
+        return
+    print()
+    print("-" * 74)
+    print("THE OPERATOR CONSOLE")
+    print("-" * 74)
+    for ln in lines:
+        if len(ln) > 108:
+            ln = ln[:108] + "..."
+        print(f"  {ln}")
+    print()
 
 
 def _print_payload_log(path: str) -> None:
