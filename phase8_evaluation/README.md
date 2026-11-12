@@ -80,9 +80,9 @@ The matrix is the lab's output:
 
   THE DENOMINATOR
     techniques in scope   : 93
-    measured              : 54
-    ruled but not measured: 12
-    not exercised at all  : 27
+    measured              : 65
+    ruled but not measured: 6
+    not exercised at all  : 22
     of which campaigns    : 4
 
   RULES THAT FIRED ON THE BASELINE AND ARE SILENT ON THE VARIANT

@@ -51,9 +51,9 @@ phase7_detection\target\release\px_detect.exe --catalog-summary
 
 ```
   techniques in scope : 93
-  measured            : 54
-  ruled only          : 12
-  not exercised       : 27
+  measured            : 65
+  ruled only          : 6
+  not exercised       : 22
   of which campaigns  : 4
 ```
 
@@ -268,7 +268,7 @@ build should have said, so the next one cannot pass unnoticed.
 
 ## The capability library
 
-Fourteen techniques, one table, one verb.
+Twenty-two techniques, one table, one verb.
 
 ```
 CAP|<cmd_id>|<technique>|<arguments>
@@ -283,7 +283,8 @@ it, two capabilities in flight are indistinguishable.
   c2> cap 1 list
   <- session 1: the capabilities compiled into this build: inject, token,
      keylog, clip, persist, antifor, recon, lolbin, script, dnstun, steg,
-     spoof, delay, antivm
+     spoof, delay, antivm, service, schtask, com, elev, proxy, ps, stage,
+     browser
 
   c2> cap 1 recon sysinfo
   <- session 1: host=DESKTOP-TD3A3HK os=6.2.9200 build=9200 arch=9 cpus=24
@@ -295,10 +296,23 @@ names, the port scan touches one named host, the persistence writes a key or
 a subscription on the lab machine and reports the command that removes it,
 and the keylogger records keys typed into the lab VM.
 
+The techniques that change the machine **put it back**: the service, the
+scheduled task, the COM class, the auto-elevate key and the proxy setting
+are all removed again, and the report says how. The browser capability
+opens a credential store and does **not** read it -- the file open is the
+telemetry, and the contents stay on the machine.
+
 The library is a **separate build flag**, so the `caps` arm exists alongside
 the baseline and the delta in telemetry is measurable. A capability that is
 not compiled in cannot be detected, and "present but disabled" is not the
 same thing as "not present".
+
+**One limitation, stated rather than hidden:** the string table covers the
+*protocol* vocabulary. The literals inside the capability library -- the
+registry paths, the service name, the command lines -- are not in it, so
+they are visible in the binary. The obfuscation arm therefore measures what
+the string table can do, and the capability arm is **not** a clean
+measurement of a payload with no readable strings.
 
 ---
 
@@ -351,6 +365,10 @@ arms; the rest cover the capability library.
 | px-048 | Malicious object linked from a document | malicious OLE |
 | px-049 | Keyboard input state polled by a non-shell process | keylogging |
 | px-050 | Remote service created over the network | remote execution |
+| px-051 | COM class registered to an unusual server path | COM hijacking |
+| px-052 | Auto-elevate registry key written | UAC bypass |
+| px-053 | System proxy changed by an unusual process | proxying |
+| px-054 | Browser credential store opened | browser credentials |
 
 The rules are written so that they key on **behaviour**, not on a
 string. That is deliberate: a rule that keys on a string stops working

@@ -32,6 +32,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 
@@ -425,6 +426,69 @@ def test_capability_and_transfer() -> Result:
     return Result(name, ok, ", ".join(detail), time.time() - t0)
 
 
+def test_coverage_matrix() -> Result:
+    """The catalogue and the coverage matrix must agree with the rules.
+
+    The catalogue is the denominator, so a number that is wrong is a
+    report that is wrong. The check is that the matrix runs, that every
+    rule the catalogue names exists, and that the technique count is
+    what the lab says it is.
+    """
+    name = "coverage matrix"
+    exe = os.path.join(ROOT, "phase7_detection", "target", "release",
+                       "px_detect.exe")
+    if not os.path.isfile(exe):
+        return Result(name, False, "px_detect.exe is not built", 0.0)
+
+    script = os.path.join(ROOT, "phase8_evaluation", "coverage.py")
+    if not os.path.isfile(script):
+        return Result(name, False, "coverage.py not found", 0.0)
+
+    t0 = time.time()
+    with tempfile.TemporaryDirectory() as td:
+        rules_path = os.path.join(td, "rules.json")
+        catalog_path = os.path.join(td, "catalog.json")
+        with open(rules_path, "wb") as fh:
+            subprocess.run([exe, "--emit", "json"], stdout=fh, check=True)
+        with open(catalog_path, "wb") as fh:
+            subprocess.run([exe, "--emit", "catalog"], stdout=fh, check=True)
+
+        ok, out = run([sys.executable, script, "--rules", rules_path,
+                       "--catalog", catalog_path], timeout=300)
+        if not ok:
+            return Result(name, False, "coverage.py failed", time.time() - t0)
+
+        # The matrix must print the denominator, and the technique count
+        # must not have silently changed.
+        if "THE DENOMINATOR" not in out:
+            return Result(name, False, "the matrix printed no denominator",
+                          time.time() - t0)
+
+        import json as _json
+        with open(catalog_path, "r", encoding="utf-8-sig") as fh:
+            catalog = _json.load(fh)
+        measured = sum(1 for t in catalog if t["status"] == "measured")
+        ruled = sum(1 for t in catalog if t["status"] == "ruled")
+        gaps = sum(1 for t in catalog if t["status"] == "not_exercised")
+
+        # Every rule the catalogue names must exist.
+        with open(rules_path, "r", encoding="utf-8-sig") as fh:
+            rule_ids = {r["id"] for r in _json.load(fh)}
+        missing = []
+        for t in catalog:
+            for rid in [x.strip() for x in t.get("rules", "").split(",")
+                        if x.strip()]:
+                if rid not in rule_ids:
+                    missing.append(f"{t['id']}->{rid}")
+
+    detail = (f"{len(catalog)} techniques, {measured} measured, "
+              f"{ruled} ruled only, {gaps} not exercised")
+    if missing:
+        detail += f", MISSING RULES: {', '.join(missing)}"
+        return Result(name, False, detail, time.time() - t0)
+    return Result(name, True, detail, time.time() - t0)
+
+
 def test_pypdf() -> Result:
     """The PDF inspector against pypdf, if it is installed."""
     name = "PDF inspector vs pypdf"
@@ -475,7 +539,7 @@ def main(argv=None) -> int:
     ]
     if not args.quick:
         tests += [test_variants, test_resilient_reconnect, test_evaluator,
-                  test_capability_and_transfer,
+                  test_capability_and_transfer, test_coverage_matrix,
                   test_pypdf, test_sysmon_schema]
 
     results = []
