@@ -178,8 +178,26 @@ lateral    movement to a second lab host
 resilient  reconnects with backoff when the network changes under it
 xfer       file download and screen capture
 caps       the capability library -- twenty-two techniques, one at a time
+all        everything except domain generation -- ONE binary, for the operator
 full       everything at once -- the worst case a defender has to catch
 ```
+
+**`px_payload_all.exe` is the one to use if you just want to drive a
+Windows machine.** It carries the obfuscated strings, the AMSI bypass, the
+ETW unhook, the encrypted channel, the credential access, the lateral
+movement, the reconnect, the file transfer, the screen capture and the
+whole technique library -- and it still connects to an address you name.
+
+The one thing it leaves out is domain generation, and that is deliberate:
+the DGA arm *replaces* the C2 host with a generated name, so it cannot be
+pointed at an address at all. That makes `px_payload_full.exe` awkward to
+use and `px_payload_all.exe` practical.
+
+**What one binary costs you.** The matrix exists because a single
+everything-arm cannot tell you which technique produced which signal. The
+`telemetry` is one blob: if a rule fires, you know the defender could catch
+*something*, not that this rule catches *this* technique. So use `all` for
+the work and the matrix for the measurement.
 
 ```powershell
 cd phase3_fileless\loader

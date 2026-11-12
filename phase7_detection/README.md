@@ -33,6 +33,16 @@ builds a **matrix** of arms, one per capability:
 | `caps` | the capability library -- fourteen techniques, one at a time |
 | `full` | everything at once |
 
+**The `all` arm is the one for the operator.** It carries every capability
+except domain generation, and it still connects to an address you name --
+the DGA arm *replaces* the C2 host with a generated name, so it cannot be
+pointed at an address at all. That is what makes `full` awkward to use and
+`all` practical.
+
+**What one binary costs you.** The matrix exists because a single
+everything-arm cannot attribute telemetry to a technique. Use `all` for the
+work and the matrix for the measurement.
+
 **The `full` arm is the one that matters most.** It is the worst case a
 defender has to be able to catch, and it is the arm the detection rules are
 finally validated against.

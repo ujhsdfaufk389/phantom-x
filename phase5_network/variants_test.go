@@ -187,6 +187,12 @@ func expectedMaskFor(payload string) (uint32, bool) {
 		return CapLateral, true
 	case "caps":
 		return CapLibrary, true
+	case "all":
+		// Everything except the domain generation, which would replace
+		// the host with a generated name that only resolves inside the
+		// lab segment.
+		return CapObfuscated | CapAMSI | CapETW | CapEncrypted |
+			CapCred | CapLateral | CapLibrary, true
 	case "xfer":
 		// The transfer arm has no bit of its own: it is the plain
 		// channel with the file-transfer and screen-capture code

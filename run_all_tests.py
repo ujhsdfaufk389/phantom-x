@@ -231,7 +231,7 @@ def test_variants() -> Result:
     try:
         for arm in ("baseline", "obfuscate", "amsi", "etw", "encrypt",
                     "dga", "cred", "lateral", "resilient", "xfer",
-                    "caps", "full"):
+                    "caps", "all", "full"):
             exe = os.path.join(variants_dir, f"px_payload_{arm}.exe")
             if not os.path.isfile(exe):
                 detail.append(f"{arm}=missing")
