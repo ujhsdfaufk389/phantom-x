@@ -122,6 +122,20 @@ __declspec(dllexport) void px_selftest_entry(void)
         check_str("percent", fmt("100%%"), "100%");
     }
 
+    /* -- precision ------------------------------------------------------- */
+    {
+        px_logf("  testing the precision ...\r\n");
+        /* The precision caps the string.
+         *
+         * The '.' was not implemented at all, and the formatter did not
+         * complain: an unknown conversion was copied out literally. So
+         * "%.4s" printed the four characters "%.4s" and the string it
+         * was supposed to shorten was not printed at all. */
+        check_str("precision", fmt("%.4s", "abcdefgh"), "abcd");
+        check_str("precision longer than the string", fmt("%.10s", "abc"), "abc");
+        check_str("precision zero", fmt("[%.0s]", "abc"), "[]");
+    }
+
     /* -- the underflow bug ---------------------------------------------- */
     {
         px_logf("  testing the padding underflow ...\r\n");

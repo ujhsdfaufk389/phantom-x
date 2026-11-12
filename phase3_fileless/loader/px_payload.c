@@ -785,6 +785,7 @@ static px_size_t px_vfmt_va(char *out, px_size_t cap, const char *fmt,
         int zero_pad = 0;
         int left_justify = 0;
         int longness = 0;   /* 0 = int, 1 = long, 2 = long long, 3 = size_t */
+        int precision = -1; /* -1 = no precision given */
         char conv;
 
         if (*fmt != '%') {
@@ -814,6 +815,31 @@ static px_size_t px_vfmt_va(char *out, px_size_t cap, const char *fmt,
             fmt++;
             if (width > 64)
                 width = 64;
+        }
+
+        /* precision
+         *
+         * The '.' and the number after it. This is the printf
+         * precision: for a string it is the maximum number of
+         * characters to print.
+         *
+         * It was not implemented, and the formatter did not complain:
+         * an unknown conversion was copied out literally. So "%.400s"
+         * printed the six characters "%.400s" and the text it was
+         * supposed to shorten was not printed at all. The output looked
+         * like a report with a placeholder in it, which is exactly what
+         * it was.
+         */
+        precision = -1;
+        if (*fmt == '.') {
+            fmt++;
+            precision = 0;
+            while (*fmt >= '0' && *fmt <= '9') {
+                precision = precision * 10 + (*fmt - '0');
+                fmt++;
+                if (precision > 4096)
+                    precision = 4096;
+            }
         }
 
         /* length modifier */
@@ -861,6 +887,10 @@ static px_size_t px_vfmt_va(char *out, px_size_t cap, const char *fmt,
              * past the buffer's capacity is pointless anyway. */
             while (s[len] && len < cap)
                 len++;
+            /* The precision caps the string. A precision of zero prints
+             * nothing, which is what printf does. */
+            if (precision >= 0 && (px_size_t)precision < len)
+                len = (px_size_t)precision;
             {
                 /* The padding is only ever positive. Computing it as
                  * width - len without the guard underflows when no width

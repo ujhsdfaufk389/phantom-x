@@ -1033,5 +1033,119 @@ reason to install one.",
             fields: &["ServiceName", "ImagePath", "AccountName", "ServiceFileName"],
             catches: "the lateral arm, and the remote-shell technique",
         },
+        Rule {
+            id: "px-051",
+            title: "COM Class Registered To An Unusual Server Path",
+            status: "experimental",
+            description: "Detects a COM class being pointed at a program. The technique is \
+silent: nothing runs until some other program looks the class up, \
+and the registration is the only event. \
+The rule keys on the INPROC_SERVER32 value, which is the whole \
+mechanism, and it fires on the write rather than on the load because \
+the load may never come.",
+            level: "high",
+            techniques: vec!["T1546.015"],
+            logsource: vec![("category", "registry_set"), ("product", "windows")],
+            selection: Block {
+                matchers: vec![Matcher::one("TargetObject", Op::Contains, "\\InprocServer32")],
+            },
+            selection_and: Block {
+                matchers: vec![Matcher::one("TargetObject", Op::Contains, "\\CLSID\\")],
+            },
+            filter: Block {
+                matchers: vec![
+                    Matcher::one("Details", Op::Contains, "C:\\Windows\\System32"),
+                    Matcher::one("Details", Op::Contains, "C:\\Windows\\SysWOW64"),
+                ],
+            },
+            fields: &["TargetObject", "Details", "Image", "User"],
+            catches: "the COM hijacking capability",
+        },
+        Rule {
+            id: "px-052",
+            title: "Auto-Elevate Registry Key Written",
+            status: "experimental",
+            description: "Detects the UAC bypass. The technique writes a key that Windows \
+elevates without a prompt, so the elevation never asks the user \
+anything. \
+The key is the signal: a program that appears under ms-settings is \
+asking for elevation by default, and no legitimate software does that \
+for itself.",
+            level: "high",
+            techniques: vec!["T1548.002"],
+            logsource: vec![("category", "registry_set"), ("product", "windows")],
+            selection: Block {
+                matchers: vec![Matcher::one("TargetObject", Op::Contains, "\\ms-settings\\Shell\\Open\\command")],
+            },
+            selection_and: Block { matchers: vec![] },
+            filter: Block { matchers: vec![] },
+            fields: &["TargetObject", "Details", "Image", "User"],
+            catches: "the UAC bypass capability",
+        },
+        Rule {
+            id: "px-053",
+            title: "System Proxy Changed By An Unusual Process",
+            status: "experimental",
+            description: "Detects the machine's proxy being pointed somewhere else. The \
+setting is read by every application that uses WinINet, so a quiet \
+change to it redirects traffic that has nothing to do with the process \
+that made it. \
+That is what makes it worth a rule: the change is made by one process \
+and the effect is felt by all of them.",
+            level: "medium",
+            techniques: vec!["T1090"],
+            logsource: vec![("category", "registry_set"), ("product", "windows")],
+            selection: Block {
+                matchers: vec![Matcher::one("TargetObject", Op::Contains, "\\Internet Settings")],
+            },
+            selection_and: Block {
+                matchers: vec![Matcher::many("Details", Op::Contains,
+                    vec!["ProxyServer", "ProxyEnable", "AutoConfigURL"])],
+            },
+            filter: Block {
+                matchers: vec![
+                    Matcher::one("Image", Op::EndsWith, "\\explorer.exe"),
+                    Matcher::one("Image", Op::EndsWith, "\\msedge.exe"),
+                    Matcher::one("Image", Op::EndsWith, "\\chrome.exe"),
+                ],
+            },
+            fields: &["TargetObject", "Details", "Image", "User"],
+            catches: "the proxy capability",
+        },
+        Rule {
+            id: "px-054",
+            title: "Browser Credential Store Opened",
+            status: "experimental",
+            description: "Detects a browser's credential store being opened by something that \
+is not the browser. The file -- Login Data, for the Chromium \
+browsers -- holds the encrypted credential list, and the encryption \
+is tied to the user's DPAPI key, which is exactly why it is worth \
+stealing. \
+The rule keys on the file name and on the browser's own directory, \
+because the file name alone is too common.",
+            level: "high",
+            techniques: vec!["T1555.003", "T1005"],
+            logsource: vec![("category", "file_event"), ("product", "windows")],
+            selection: Block {
+                matchers: vec![Matcher::many("TargetFilename", Op::EndsWith,
+                    vec!["\\Login Data", "\\logins.json", "\\Web Data",
+                         "\\cookies.sqlite"])],
+            },
+            selection_and: Block {
+                matchers: vec![Matcher::many("TargetFilename", Op::Contains,
+                    vec!["\\Google\\Chrome\\", "\\Microsoft\\Edge\\",
+                         "\\Mozilla\\Firefox\\", "\\BraveSoftware\\"])],
+            },
+            filter: Block {
+                matchers: vec![
+                    Matcher::one("Image", Op::EndsWith, "\\chrome.exe"),
+                    Matcher::one("Image", Op::EndsWith, "\\msedge.exe"),
+                    Matcher::one("Image", Op::EndsWith, "\\firefox.exe"),
+                    Matcher::one("Image", Op::EndsWith, "\\brave.exe"),
+                ],
+            },
+            fields: &["TargetFilename", "Image", "User", "Access"],
+            catches: "the browser-credential capability",
+        },
     ]
 }

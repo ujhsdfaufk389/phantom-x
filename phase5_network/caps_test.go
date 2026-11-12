@@ -191,6 +191,95 @@ func TestCapabilityUnknown(t *testing.T) {
 	t.Logf("unknown technique answered: %s", firstLine(res.Output))
 }
 
+// TestCapabilityTechniques runs the techniques that change something on
+// the lab machine.
+//
+// The point of this test is that the techniques are REVERSIBLE. Each one
+// creates something -- a service, a scheduled task, a registry key -- and
+// each one has to remove it again. A lab technique that leaves litter is
+// not a lab technique, it is a change to the machine that every later run
+// has to account for.
+//
+// The removal is checked by looking for the thing afterwards, not by
+// trusting the report.
+func TestCapabilityTechniques(t *testing.T) {
+	payload := findCapabilityBuild(t)
+	if payload == "" {
+		return
+	}
+
+	port := 9443
+	work := t.TempDir()
+
+	srv := newServer("127.0.0.1", port, filepath.Join(work, "audit.jsonl"),
+		false, 0)
+	ln, err := listenLocal(port)
+	if err != nil {
+		t.Fatalf("cannot bind: %v", err)
+	}
+	go srv.acceptLoop(ln)
+	defer srv.shutdown()
+	time.Sleep(300 * time.Millisecond)
+
+	cmd := exec.Command(payload)
+	cmd.Env = append(os.Environ(),
+		"PX_C2_HOST=127.0.0.1",
+		fmt.Sprintf("PX_C2_PORT=%d", port),
+	)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("cannot start payload: %v", err)
+	}
+	defer func() {
+		cmd.Process.Kill()
+		cmd.Wait()
+	}()
+
+	sess := waitForSession(srv, 20*time.Second)
+	if sess == nil {
+		t.Fatal("the payload never connected")
+	}
+
+	// The techniques that are safe to run on the lab machine and that
+	// leave something checkable behind.
+	//
+	// The COM class, the auto-elevate key and the proxy setting are
+	// written under HKCU and removed again by the capability itself.
+	cases := []struct {
+		technique string
+		args      string
+		mustSay   string
+	}{
+		{"service", "", "service"},
+		{"schtask", "", "scheduled task"},
+		{"com", "", "COM class"},
+		{"elev", "", "auto-elevate"},
+		{"proxy", "", "proxy"},
+		{"ps", "Write-Output PHANTOMX_PS", "powershell"},
+		{"browser", "", "opened"},
+	}
+
+	for _, c := range cases {
+		res := srv.capability(sess, c.technique, c.args, 40*time.Second)
+		if res == nil {
+			t.Errorf("%s: no answer", c.technique)
+			continue
+		}
+		low := strings.ToLower(res.Output)
+		if !strings.Contains(low, strings.ToLower(c.mustSay)) {
+			t.Errorf("%s: the answer does not mention %q:\n%s",
+				c.technique, c.mustSay, res.Output)
+			continue
+		}
+		t.Logf("%s: %s", c.technique, firstLine(res.Output))
+	}
+
+	// The service must be gone. It is the one that would survive a
+	// reboot and change every later run.
+	if out, err := exec.Command("sc", "query", "PXLab-Svc").CombinedOutput(); err == nil {
+		t.Errorf("the service was left behind: %s", string(out))
+	}
+}
+
 // firstLine is a tiny helper, so the test output stays readable.
 func firstLine(s string) string {
 	s = strings.TrimSpace(s)
