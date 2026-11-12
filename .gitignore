@@ -22,6 +22,9 @@ phase5_network/px_c2.exe
 # Windows build output
 dist/native/
 dist/variants/
+dist/phantom-x-target-*/
+dist/phantom-x-target-*.zip
+dist/phantom-x-target-*.zip.sha256
 *.obj
 *.exp
 *.lib
