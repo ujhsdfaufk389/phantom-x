@@ -22,6 +22,7 @@
             px_payload_dga.exe        domain generation
             px_payload_cred.exe       credential access
             px_payload_lateral.exe    lateral movement
+            px_payload_caps.exe       the capability library
             px_payload_full.exe       everything on at once
 
         The "full" arm is the one the detection rules are finally
@@ -150,9 +151,12 @@ $arms = [ordered]@{
     'cred'      = @('PX_CRED_ACCESS=1')
     'lateral'   = @('PX_LATERAL=1')
     'resilient' = @('PX_RESILIENT=1')
+    'xfer'      = @('PX_FILE_TRANSFER=1', 'PX_SCREENSHOT=1')
+    'caps'      = @('PX_CAPABILITIES=0x1FFF')
     'full'      = @('PX_OBFUSCATE=1', 'PX_AMSI_BYPASS=1', 'PX_ETW_UNHOOK=1',
                     'PX_ENCRYPT=1', 'PX_DGA=1', 'PX_CRED_ACCESS=1',
-                    'PX_LATERAL=1', 'PX_RESILIENT=1')
+                    'PX_LATERAL=1', 'PX_RESILIENT=1', 'PX_FILE_TRANSFER=1',
+                    'PX_SCREENSHOT=1', 'PX_CAPABILITIES=0x1FFF')
 }
 
 $built = @()
@@ -196,7 +200,12 @@ foreach ($arm in $arms.Keys) {
             continue
         }
 
-        & cmd.exe /c "link.exe /nologo /NOENTRY /ENTRY:px_entry /SUBSYSTEM:CONSOLE /OUT:$exe $obj ws2_32.lib kernel32.lib /NODEFAULTLIB" 2>&1 | Out-Null
+        # gdi32 and user32 are needed by the screen capture arm, and
+        # advapi32 by the capability library (the registry, the token
+        # and the privilege calls). Linking them unconditionally keeps
+        # every arm's link line identical, which is one fewer thing to
+        # differ between builds.
+        & cmd.exe /c "link.exe /nologo /NOENTRY /ENTRY:px_entry /SUBSYSTEM:CONSOLE /OUT:$exe $obj ws2_32.lib kernel32.lib gdi32.lib user32.lib advapi32.lib /NODEFAULTLIB" 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Host ("    FAIL {0}: link" -f $arm) -ForegroundColor Red
             $failed += $arm
@@ -226,7 +235,7 @@ if ((Test-Path $obfExe) -and (Test-Path $baseExe)) {
     $needles = @('HELLO|', 'RESULT|', 'ws2_32.dll', 'PX_C2_HOST', 'kernel32.dll',
                  'ntdll.dll', 'AmsiScanBuffer', 'EtwEventWrite', 'schtasks.exe',
                  'lsass.exe', 'cmd /c ', 'EXIT', 'PING', 'PONG', 'EXEC|', 'CRED|',
-                 'LATERAL|', 'CAPS|', 'amsi.dll')
+                 'LATERAL|', 'CAPS|', 'amsi.dll', 'CAP|', 'DL|', 'SHOT|')
 
     function Find-Bytes {
         param([byte[]]$Hay, [string]$Needle)

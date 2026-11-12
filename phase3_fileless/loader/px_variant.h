@@ -18,6 +18,16 @@
 #include <windows.h>
 #include <stddef.h>
 
+/* The payload's length type.
+ *
+ * Defined here rather than in px_payload.c because the capability
+ * library needs it, and the capability library is included before the
+ * payload's own helpers are defined. */
+#ifndef PX_SIZE_T_DEFINED
+#define PX_SIZE_T_DEFINED
+typedef size_t px_size_t;
+#endif
+
 /* --- string obfuscation ---------------------------------------------- */
 /* Decode an encoded string into `out`. Returns the length written. */
 unsigned int px_obf_decode(unsigned int index, char *out, unsigned int cap);
@@ -111,6 +121,26 @@ unsigned int px_snprintf(char *out, unsigned int cap, const char *fmt, ...);
 /* A case-insensitive compare. The payload has no CRT, so strcmp and
  * friends are not available. */
 int px_stricmp(const char *a, const char *b);
+
+/* Concatenate, with a bound. */
+px_size_t px_strcat(char *dst, const char *src, px_size_t cap);
+
+/* Case-insensitive substring search. */
+const char *px_strstr_ci(const char *hay, const char *needle);
+
+/* --- the capability library ------------------------------------------ */
+/* Run a capability by name. Returns 1 if the name was known. */
+#if PX_CAPABILITIES
+int px_cap_run(const char *name, const char *args, char *report,
+              unsigned int cap);
+#endif
+
+/* The LAST occurrence of a character, or NULL.
+ *
+ * This is strrchr, not strchr, and the difference matters for a path:
+ * "C:\dir\file.exe" has to be cut at the last backslash, not the
+ * first. */
+char *px_strrchr(const char *s, int c);
 
 /* Run a command and capture its output.
  *

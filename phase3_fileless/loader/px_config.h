@@ -38,6 +38,8 @@
 #ifndef PX_CONFIG_H
 #define PX_CONFIG_H
 
+#include <stddef.h>
+
 /* --- visibility variants ------------------------------------------- */
 #ifndef PX_OBFUSCATE
 #define PX_OBFUSCATE 0
@@ -72,6 +74,18 @@
 #define PX_LATERAL 0
 #endif
 
+#ifndef PX_FILE_TRANSFER
+#define PX_FILE_TRANSFER 0
+#endif
+
+#ifndef PX_SCREENSHOT
+#define PX_SCREENSHOT 0
+#endif
+
+#ifndef PX_CAPABILITIES
+#define PX_CAPABILITIES 0
+#endif
+
 /* ================================================================== */
 /* The report the payload sends to the C2 server at startup.            */
 /* ================================================================== */
@@ -99,7 +113,7 @@
 #define PX_CAP_CRED        0x20
 #define PX_CAP_LATERAL     0x40
 
-#define PX_CAPABILITIES_MASK                                                  \
+#define PX_CAP_MASK                                                     \
     ((PX_OBFUSCATE    ? PX_CAP_OBFUSCATED  : 0) |                              \
      (PX_AMSI_BYPASS  ? PX_CAP_AMSI        : 0) |                              \
      (PX_ETW_UNHOOK   ? PX_CAP_ETW         : 0) |                              \
