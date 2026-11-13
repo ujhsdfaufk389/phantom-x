@@ -480,6 +480,14 @@ phantom-x/
 
 ---
 
+## The complete walk-through
+
+Every step, in the order it has to happen -- the toolchains, the isolation, the build, the run, the telemetry, the evaluation, and the things that will bite you -- is in
+
+    docs/USAGE.md
+
+---
+
 ## Quick start
 
 ```bash
