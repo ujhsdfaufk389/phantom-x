@@ -243,7 +243,7 @@ def test_variants() -> Result:
     try:
         for arm in ("baseline", "obfuscate", "amsi", "etw", "encrypt",
                     "dga", "cred", "lateral", "resilient", "xfer",
-                    "caps", "all", "full"):
+                    "caps", "all", "stealth", "full"):
             exe = os.path.join(variants_dir, f"px_payload_{arm}.exe")
             if not os.path.isfile(exe):
                 # The endpoint removed it. That is a finding, not a
@@ -696,6 +696,41 @@ def _blocked_by_defender(out: str) -> bool:
     return any(m.lower() in low for m in markers)
 
 
+def _is_elevated() -> bool:
+    try:
+        r = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-Command",
+             "([Security.Principal.WindowsPrincipal]"
+             "[Security.Principal.WindowsIdentity]::GetCurrent())"
+             ".IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)"],
+            capture_output=True, text=True, timeout=60)
+        return "True" in (r.stdout or "")
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _relaunch_elevated() -> int:
+    """Start the suite again in an elevated shell.
+
+    Defender preferences and the hosts file both need an administrator,
+    and the suite is more useful with both. The re-launch is done with
+    ShellExecute's "runas" verb, so the user sees one UAC prompt and
+    then the suite carries on as if nothing happened.
+    """
+    script = os.path.abspath(__file__)
+    args = " ".join(sys.argv[1:])
+    cmd = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ' \
+          f'"Start-Process python -ArgumentList \'\'{script} {args}\'\' -Verb RunAs"'
+    try:
+        subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy",
+                        "Bypass", "-Command", cmd],
+                       capture_output=True, text=True, timeout=60)
+        return 0
+    except Exception:  # noqa: BLE001
+        return 1
+
+
 def test_defender_findings() -> Result:
     """What did the endpoint say about the lab's own artefacts?
 
@@ -771,11 +806,91 @@ def test_sysmon_schema() -> Result:
     return Result(name, ok, detail, 0.0)
 
 
+def _variants_repeatedly(runs: int) -> Result:
+    """Run the variant arms N times and count what the endpoint took.
+
+    THE QUESTION
+        "Will it survive being run again and again?" is not a question
+        a single run can answer. The endpoint quarantines the payload on
+        the first execution, so a second run has nothing left to run.
+
+    WHAT THIS REPORTS
+        For each round, how many arms were driven, how many the endpoint
+        removed, and how many were refused at execution. The totals are
+        the answer.
+
+    A round where every arm is refused is not a suite failure. It is
+    the endpoint doing its job, and the suite says so.
+    """
+    name = "variant arms"
+    t0 = time.time()
+    total_ok = 0
+    total_blocked = 0
+    total_missing = 0
+    total_failed = 0
+
+    for i in range(runs):
+        r = test_variants()
+        detail = r.detail
+        # Count the outcomes out of the detail string the single run
+        # produced.
+        ok = detail.count("=pass")
+        blocked = (detail.count("=blocked-by-defender")
+                   + detail.count("=quarantined"))
+        missing = detail.count("=missing")
+        failed = detail.count("=FAIL")
+        total_ok += ok
+        total_blocked += blocked
+        total_missing += missing
+        total_failed += failed
+        print(f"    round {i + 1}/{runs}: {ok} driven, {blocked} blocked "
+              f"by the endpoint, {missing} missing, {failed} failed")
+        if failed:
+            break
+
+    ok = total_failed == 0
+    return Result(name, ok,
+                  f"{runs} round(s): {total_ok} arm-runs driven, "
+                  f"{total_blocked} blocked-by-defender, "
+                  f"{total_missing} missing, {total_failed} failed",
+                  time.time() - t0)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="PHANTOM-X regression suite")
     ap.add_argument("--quick", action="store_true",
                     help="skip the slower checks")
+    ap.add_argument("--elevate", action="store_true",
+                    help="re-launch this suite in an elevated shell")
+    ap.add_argument("--runs", type=int, default=1,
+                    help="run the variant arms this many times (the "
+                         "quarantine question is about repetition)")
     args = ap.parse_args(argv)
+
+    if args.elevate:
+        return _relaunch_elevated()
+
+    if not _is_elevated():
+        print()
+        print("  This shell is not elevated. Two things need an administrator:")
+        print()
+        print("    - the Defender exclusion for the lab build output, so the")
+        print("      endpoint stops quarantining the arms between the build")
+        print("      and the test")
+        print("    - the hosts entry the DGA arm resolves its name with")
+        print()
+        print("  Run the suite elevated:")
+        print()
+        print("      python run_all_tests.py --elevate")
+        print()
+        print("  Or, once, exclude the build output for good:")
+        print()
+        print("      phase4_defender\\exclude_lab_output.ps1")
+        print()
+        print("  The suite runs either way. Without elevation the arms the")
+        print("  endpoint removed are reported as blocked-by-defender and")
+        print("  the DGA arm as needs-elevation: findings, not failures.")
+        print()
 
     print("=" * 72)
     print("PHANTOM-X :: REGRESSION SUITE")
@@ -810,7 +925,14 @@ def main(argv=None) -> int:
     for fn in tests:
         print(f"--> {fn.__doc__.strip().splitlines()[0]}")
         try:
-            r = fn()
+            if fn is test_variants and args.runs > 1:
+                # The question this answers is "will it survive being run
+                # again and again", so the variant arms are run in a
+                # loop and the report says how many of them the endpoint
+                # took each time.
+                r = _variants_repeatedly(args.runs)
+            else:
+                r = fn()
         except Exception as exc:  # noqa: BLE001
             r = Result(fn.__name__, False, f"{type(exc).__name__}: {exc}", 0.0)
         results.append(r)

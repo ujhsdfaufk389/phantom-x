@@ -174,6 +174,25 @@ $arms = [ordered]@{
                     'PX_ENCRYPT=1', 'PX_CRED_ACCESS=1',
                     'PX_LATERAL=1', 'PX_RESILIENT=1', 'PX_FILE_TRANSFER=1',
                     'PX_SCREENSHOT=1', 'PX_CAPABILITIES=0x3FFFFF')
+    # The stealth arm: the technique-heavy arm with the ARTEFACTS off.
+    #
+    # The endpoint's machine-learning verdict on this payload arrives at
+    # EXECUTION. What it reads first is a fresh unsigned binary that
+    # creates two text files next to itself and then opens a socket to
+    # an unusual port. That is a textbook trojan opening move.
+    #
+    # This arm turns the artefacts off -- no marker file, no log file --
+    # and delays the first connection, so the shape changes. It does NOT
+    # remove a single technique, so the detection rules still have
+    # behaviour to match.
+    #
+    # Whether it works is a MEASUREMENT, not a claim: the lab runs the
+    # arm and asks Defender what it thinks.
+    'stealth'   = @('PX_OBFUSCATE=1', 'PX_AMSI_BYPASS=1', 'PX_ETW_UNHOOK=1',
+                    'PX_ENCRYPT=1', 'PX_CRED_ACCESS=1',
+                    'PX_LATERAL=1', 'PX_RESILIENT=1', 'PX_FILE_TRANSFER=1',
+                    'PX_SCREENSHOT=1', 'PX_CAPABILITIES=0x3FFFFF',
+                    'PX_STEALTH=1', 'PX_STEALTH_DELAY=20')
     'full'      = @('PX_OBFUSCATE=1', 'PX_AMSI_BYPASS=1', 'PX_ETW_UNHOOK=1',
                     'PX_ENCRYPT=1', 'PX_DGA=1', 'PX_CRED_ACCESS=1',
                     'PX_LATERAL=1', 'PX_RESILIENT=1', 'PX_FILE_TRANSFER=1',
