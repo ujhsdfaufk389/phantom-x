@@ -220,12 +220,16 @@ ARMS = {
                        CommandLine="C:\\pxvm\\px_payload.exe"),
             base_event(EventID=104, Provider="Microsoft-Windows-Sysmon",
                        Channel="Application", User="lab"),
-            base_event(EventID=11, Image="C:\\pxvm\\px_payload.exe",
+            # An executable was deleted. That is the self-deletion:
+            # the file goes and the process does not.
+            base_event(EventID=25, Image="C:\\pxvm\\px_payload.exe",
                        TargetFilename="C:\\pxvm\\px_payload.exe.deleted",
-                       EventType="Rename"),
+                       IsExecutableDeleted="true"),
+            # The creation time on disk was changed. That is the
+            # timestomp -- Sysmon reports it as EventID 2.
             base_event(EventID=2, Image="C:\\pxvm\\px_payload.exe",
                        TargetFilename="C:\\pxvm\\px_payload.exe",
-                       EventType="SetFileTime"),
+                       CreationUtcTime="2020-01-01T00:00:00Z"),
         ],
         ["px-001", "px-025", "px-026", "px-027"],
     ),
@@ -289,9 +293,12 @@ ARMS = {
         [
             base_event(EventID=1, Image="C:\\pxvm\\px_payload.exe",
                        CommandLine="C:\\pxvm\\px_payload.exe"),
-            base_event(EventID=11, Image="C:\\pxvm\\px_payload.exe",
-                       TargetFilename="C:\\pxvm\\svchost.exe",
-                       EventType="Rename"),
+            # The masquerading: the process runs from a path that claims
+            # to be a system binary, in a directory no system binary
+            # lives in, and the PE header still says what it really is.
+            base_event(EventID=1, Image="C:\\Users\\lab\\svchost.exe",
+                       CommandLine="C:\\Users\\lab\\svchost.exe -k netsvcs",
+                       OriginalFileName="px_payload.exe"),
             base_event(EventID=1, Image="C:\\pxvm\\px_payload.exe",
                        CommandLine="svchost.exe -k netsvcs"),
             base_event(EventID=1, Image="C:\\pxvm\\px_payload.exe",

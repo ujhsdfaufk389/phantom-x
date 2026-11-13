@@ -140,6 +140,18 @@ pub struct Rule {
     /// assertion. Every rule says which arm it is expected to catch, and
     /// the coverage report compares that against what actually fired.
     pub catches: &'static str,
+    /// The external data source the rule needs, or "" if the lab's own
+    /// telemetry carries everything it needs.
+    ///
+    /// A rule that keys on a field nothing produces can never fire, and
+    /// a rule that cannot fire is a decoration. This field says so
+    /// out loud, and the evaluator's field check treats a rule that
+    /// declares its requirement as accounted for rather than broken.
+    ///
+    /// It is not an excuse. It is the difference between a rule that
+    /// has never been tested and one that has been tested and found
+    /// wanting.
+    pub requires: &'static str,
 }
 
 impl Rule {
@@ -226,6 +238,7 @@ impl Rule {
         out.push_str(&format!("  \"status\": {},\n", json_str(self.status)));
         out.push_str(&format!("  \"level\": {},\n", json_str(self.level)));
         out.push_str(&format!("  \"catches\": {},\n", json_str(self.catches)));
+        out.push_str(&format!("  \"requires\": {},\n", json_str(self.requires)));
         out.push_str("  \"techniques\": [");
         for (i, t) in self.techniques.iter().enumerate() {
             if i > 0 {
@@ -348,6 +361,7 @@ a section-protection pass over the mapped image.",
             filter: Block { matchers: vec![Matcher::one("IntegrityLevel", Op::Equals, "System")] },
             fields: &["Image", "CommandLine", "ParentImage", "IntegrityLevel", "User"],
             selection_and: Block { matchers: vec![] },
+            requires: "",
             catches: "the loader and the payload, on every arm",
         },
         Rule {
@@ -370,6 +384,7 @@ expected process; anything else is worth a look.",
             filter: Block { matchers: vec![] },
             fields: &["Image", "CommandLine", "ParentImage", "User"],
             selection_and: Block { matchers: vec![] },
+            requires: "",
             catches: "the loader, on every arm",
         },
         Rule {
@@ -389,6 +404,7 @@ RESULT frame is the strongest indicator.",
             filter: Block { matchers: vec![] },
             fields: &["DestinationIp", "DestinationPort", "SourceIp", "Image", "Protocol"],
             selection_and: Block { matchers: vec![] },
+            requires: "",
             catches: "the BASELINE arm only -- the encrypted arm hides this",
         },
         Rule {
@@ -410,6 +426,7 @@ inside a PDF as an embedded file. The PHANTOM-X carrier embeds the payload as an
             filter: Block { matchers: vec![] },
             fields: &["Image", "CommandLine", "ParentImage", "ParentCommandLine"],
             selection_and: Block { matchers: vec![] },
+            requires: "",
             catches: "the loader, on every arm",
         },
         Rule {
@@ -428,6 +445,7 @@ target process and writes a mapped image into its address space.",
             filter: Block { matchers: vec![] },
             fields: &["Image", "CommandLine", "ParentImage", "OriginalFileName"],
             selection_and: Block { matchers: vec![] },
+            requires: "",
             catches: "the hollow tool",
         },
         Rule {
@@ -446,6 +464,7 @@ the extension is pointed at it.",
             filter: Block { matchers: vec![] },
             fields: &["TargetObject", "Details", "Image"],
             selection_and: Block { matchers: vec![] },
+            requires: "",
             catches: "the file-association step, on every arm",
         },
         Rule {
@@ -469,6 +488,7 @@ leaves the machine unprotected is a finding, not a convenience.",
             filter: Block { matchers: vec![] },
             fields: &["ScriptBlockText", "Path", "User"],
             selection_and: Block { matchers: vec![] },
+            requires: "",
             catches: "the lab's own A/B toggle -- a rule about the RESEARCHER",
         },
         Rule {
@@ -492,6 +512,7 @@ the machine was left unprotected.",
             filter: Block { matchers: vec![] },
             fields: &["Image", "CommandLine", "ParentImage"],
             selection_and: Block { matchers: vec![] },
+            requires: "",
             catches: "the lab's own restore guard",
         },
 
@@ -534,6 +555,7 @@ property that makes it worth having.",
             },
             fields: &["SourceImage", "TargetImage", "GrantedAccess", "CallTrace"],
             selection_and: Block { matchers: vec![] },
+            requires: "",
             catches: "the credential arm",
         },
         Rule {
@@ -559,6 +581,7 @@ that initiated it, which is why a single-host lab cannot see this at all.",
             filter: Block { matchers: vec![] },
             fields: &["ServiceName", "ImagePath", "AccountName", "ServiceFileName"],
             selection_and: Block { matchers: vec![] },
+            requires: "",
             catches: "the lateral arm, on the TARGET host",
         },
         Rule {
@@ -589,6 +612,7 @@ the finding the comparison is meant to produce.",
             filter: Block { matchers: vec![] },
             fields: &["DestinationIp", "DestinationPort", "SourceIp", "Image", "Protocol"],
             selection_and: Block { matchers: vec![] },
+            requires: "",
             catches: "the encrypted arm",
         },
         Rule {
@@ -614,6 +638,7 @@ logsource from the others.",
             filter: Block { matchers: vec![] },
             fields: &["QueryName", "QueryResults", "Image"],
             selection_and: Block { matchers: vec![] },
+            requires: "",
             catches: "the DGA arm",
         },
         Rule {
@@ -643,6 +668,7 @@ technique applied to two different functions.",
             filter: Block { matchers: vec![] },
             fields: &["SourceImage", "TargetImage", "GrantedAccess", "CallTrace"],
             selection_and: Block { matchers: vec![] },
+            requires: "",
             catches: "the AMSI and ETW arms -- without needing ETW",
         },
         Rule {
@@ -669,6 +695,7 @@ rule that survives.",
             filter: Block { matchers: vec![] },
             fields: &["TargetFilename", "Image", "Signature", "SignatureStatus"],
             selection_and: Block { matchers: vec![] },
+            requires: "",
             catches: "the obfuscated arm",
         },
     ];

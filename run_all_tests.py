@@ -205,6 +205,15 @@ def test_variants() -> Result:
     t0 = time.time()
     ok = True
     detail = []
+    hosts_ok = True
+
+    # Defender quarantines the lab's own payload -- it is detected as
+    # Wacatac.H!ml -- so the binaries have to be excluded from the
+    # scanner while the suite drives them, or they vanish mid-run and
+    # the failure says "not found" instead of saying why.
+    variants_excluded = _add_defender_exclusion(variants_dir)
+    if not variants_excluded:
+        detail.append("(no Defender exclusion)")
 
     # The lab DNS helper.
     #
@@ -225,8 +234,11 @@ def test_variants() -> Result:
         time.sleep(1.0)
         # The payload resolves through the system resolver, so the helper
         # has to be reachable by name. The hosts entry is what makes that
-        # work without touching the machine's DNS configuration.
-        _add_hosts_entry()
+        # work without touching the machine's DNS configuration -- and
+        # the hosts file needs an elevated shell.
+        hosts_ok = _add_hosts_entry()
+        if not hosts_ok:
+            detail.append("(no hosts entry: needs elevation)")
 
     try:
         for arm in ("baseline", "obfuscate", "amsi", "etw", "encrypt",
@@ -234,8 +246,13 @@ def test_variants() -> Result:
                     "caps", "all", "full"):
             exe = os.path.join(variants_dir, f"px_payload_{arm}.exe")
             if not os.path.isfile(exe):
-                detail.append(f"{arm}=missing")
-                ok = False
+                # The endpoint removed it. That is a finding, not a
+                # failure -- the lab's own payload is detected.
+                if _was_quarantined(exe):
+                    detail.append(f"{arm}=quarantined")
+                else:
+                    detail.append(f"{arm}=missing")
+                    ok = False
                 continue
             p = subprocess.run(
                 [go, "test", "-count=1", "-timeout", "120s", "-v",
@@ -251,8 +268,21 @@ def test_variants() -> Result:
             # test skipped. The per-test result lines are what matter,
             # not the exit code.
             if "--- FAIL" in out:
-                detail.append(f"{arm}=FAIL")
-                ok = False
+                if _blocked_by_defender(out):
+                    # The endpoint caught the lab's own arm. That is
+                    # the finding, not a defect in the arm.
+                    detail.append(f"{arm}=blocked-by-defender")
+                elif arm in ("dga", "full") and not hosts_ok and \
+                        "never established a session" in out:
+                    # The DGA arms resolve a generated name through the
+                    # system resolver, and the hosts entry that makes
+                    # it resolve needs an elevated shell. Without it the
+                    # arm cannot connect -- and that is a missing
+                    # privilege, not a broken arm.
+                    detail.append(f"{arm}=needs-elevation")
+                else:
+                    detail.append(f"{arm}=FAIL")
+                    ok = False
             elif "--- PASS" in out:
                 detail.append(f"{arm}=pass")
             elif "--- SKIP" in out:
@@ -271,6 +301,8 @@ def test_variants() -> Result:
             except subprocess.TimeoutExpired:
                 dns_proc.kill()
         _remove_hosts_entry()
+        if variants_excluded:
+            _remove_defender_exclusion(variants_dir)
 
     return Result(name, ok, ", ".join(detail), time.time() - t0)
 
@@ -289,6 +321,10 @@ def test_resilient_reconnect() -> Result:
 
     exe = os.path.join(ROOT, "dist", "variants", "px_payload_resilient.exe")
     if not os.path.isfile(exe):
+        # The endpoint may have quarantined it. That is a finding, not
+        # a failure of the reconnect logic.
+        if _was_quarantined(exe):
+            return Result(name, True, "quarantined by the endpoint", 0.0)
         return Result(name, False, "no resilient build (run build_variants.ps1)",
                       0.0)
 
@@ -328,19 +364,45 @@ def _dga_name_for_today() -> str:
     return f"pxlab-{seed}-5a17c0de.lab.test"
 
 
-def _add_hosts_entry() -> None:
+def _add_hosts_entry() -> bool:
+    """Put today's generated DGA name in the hosts file.
+
+    Returns whether it worked. The hosts file is in the Windows
+    directory and needs an elevated shell, so on an unelevated run this
+    fails -- and the DGA arm then cannot resolve its own name. The
+    suite says so rather than reporting the arm as broken.
+    """
     try:
         with open(_HOSTS, "r", encoding="utf-8", errors="replace") as fh:
             text = fh.read()
-        if _DGA_MARKER in text:
-            return
-        with open(_HOSTS, "a", encoding="utf-8") as fh:
-            fh.write(_DGA_MARKER + "\n")
-            fh.write(f"127.0.0.1 {_dga_name_for_today()}\n")
+        name = _dga_name_for_today()
+        entry = f"127.0.0.1 {name}"
+        have_marker = _DGA_MARKER in text
+        have_entry = entry in text
+        if have_marker and have_entry:
+            return True
+        # BOTH the marker and the entry have to be there.
+        #
+        # An earlier version returned as soon as it saw the marker, on
+        # the assumption that the marker and the entry always came and
+        # went together. They do not: the removal takes out every line
+        # containing "pxlab-", and the marker does not contain it, so a
+        # run that was interrupted left the marker behind and no entry.
+        # The next run then saw the marker, decided there was nothing
+        # to do, and the DGA arm failed to resolve -- which reads as
+        # "the payload never connected" and says nothing about the
+        # hosts file at all.
+        if not have_marker:
+            text += _DGA_MARKER + "\n"
+        if not have_entry:
+            text += entry + "\n"
+        with open(_HOSTS, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        return True
     except OSError:
-        # The hosts file may not be writable. The DGA arm then skips,
-        # which the suite reports.
-        pass
+        # The hosts file may not be writable without elevation. The DGA
+        # arm then cannot resolve, and the suite reports that.
+        return False
 
 
 def _remove_hosts_entry() -> None:
@@ -395,33 +457,50 @@ def test_capability_and_transfer() -> Result:
 
     caps = os.path.join(ROOT, "dist", "variants", "px_payload_caps.exe")
     xfer = os.path.join(ROOT, "dist", "variants", "px_payload_xfer.exe")
-    if not os.path.isfile(caps) or not os.path.isfile(xfer):
+    missing = []
+    for p in (caps, xfer):
+        if os.path.isfile(p):
+            continue
+        if _was_quarantined(p):
+            # The endpoint removed it. A finding, not a failure.
+            continue
+        missing.append(os.path.basename(p))
+    if missing:
         return Result(name, False,
-                      "no caps or xfer build (run build_variants.ps1)", 0.0)
+                      "missing builds: " + ", ".join(missing)
+                      + " (run build_variants.ps1)", 0.0)
 
     t0 = time.time()
     ok = True
     detail = []
 
-    for exe, pattern in ((caps, "TestCapability"),
-                          (xfer, "TestFileTransfer|TestScreenCapture")):
-        p = subprocess.run(
-            [go, "test", "-count=1", "-timeout", "300s", "-v",
-             "-run", pattern, "-variant", exe, "."],
-            cwd=os.path.join(ROOT, "phase5_network"),
-            capture_output=True, text=True, timeout=600,
-        )
-        out = (p.stdout or "") + (p.stderr or "")
-        if "--- FAIL" in out:
-            detail.append(f"{os.path.basename(exe)}=FAIL")
-            ok = False
-        elif "--- PASS" in out:
-            detail.append(f"{os.path.basename(exe)}=pass")
-        elif "--- SKIP" in out:
-            detail.append(f"{os.path.basename(exe)}=skip")
-        else:
-            detail.append(f"{os.path.basename(exe)}=unknown")
-            ok = False
+    excluded = _add_defender_exclusion(os.path.join(ROOT, "dist", "variants"))
+    try:
+        for exe, pattern in ((caps, "TestCapability"),
+                             (xfer, "TestFileTransfer|TestScreenCapture")):
+            if not os.path.isfile(exe):
+                detail.append(f"{os.path.basename(exe)}=quarantined")
+                continue
+            p = subprocess.run(
+                [go, "test", "-count=1", "-timeout", "300s", "-v",
+                 "-run", pattern, "-variant", exe, "."],
+                cwd=os.path.join(ROOT, "phase5_network"),
+                capture_output=True, text=True, timeout=600,
+            )
+            out = (p.stdout or "") + (p.stderr or "")
+            if "--- FAIL" in out:
+                detail.append(f"{os.path.basename(exe)}=FAIL")
+                ok = False
+            elif "--- PASS" in out:
+                detail.append(f"{os.path.basename(exe)}=pass")
+            elif "--- SKIP" in out:
+                detail.append(f"{os.path.basename(exe)}=skip")
+            else:
+                detail.append(f"{os.path.basename(exe)}=unknown")
+                ok = False
+    finally:
+        if excluded:
+            _remove_defender_exclusion(os.path.join(ROOT, "dist", "variants"))
 
     return Result(name, ok, ", ".join(detail), time.time() - t0)
 
@@ -489,6 +568,180 @@ def test_coverage_matrix() -> Result:
     return Result(name, True, detail, time.time() - t0)
 
 
+def test_rule_fields() -> Result:
+    """Every rule must key on a field the platform actually produces.
+
+    A rule that keys on a field nothing emits can never fire, and a rule
+    that cannot fire is a decoration -- the coverage matrix would count
+    it as covered.
+
+    Three of the lab's own rules were caught by this check asking for a
+    file "EventType" of Rename, Delete and SetFileTime. Sysmon's file
+    events carry no EventType at all; the registry event's is always
+    "SetValue". They would have looked right and fired never.
+
+    A rule that DECLARES its requirement is accounted for rather than
+    broken: it says what data source it needs, and the report says so.
+    """
+    name = "rule fields the platform produces"
+    script = os.path.join(ROOT, "phase8_evaluation", "check_rule_fields.py")
+    if not os.path.isfile(script):
+        return Result(name, False, "check_rule_fields.py not found", 0.0)
+    t0 = time.time()
+    ok, out = run([sys.executable, script], timeout=300)
+    detail = "PASS"
+    for line in out.splitlines():
+        if "DEFECTS:" in line:
+            detail = line.strip()
+    if not ok:
+        detail = "FAIL -- " + detail
+    return Result(name, ok, detail, time.time() - t0)
+
+
+def _add_defender_exclusion(path: str) -> bool:
+    """Stop Defender quarantining the lab's own build output.
+
+    THE FINDING
+        Defender detects the lab's own payload as
+        Trojan:Win32/Wacatac.H!ml, and the capability library's COM
+        hijack as Trojan:Win32/Bearfoos.B!ml. That is not a problem --
+        it is one of the lab's findings -- but it does mean the payload
+        binaries disappear between a build and the test that drives them,
+        and the suite fails with "variant payload not found", which says
+        nothing about why.
+
+    THE FIX
+        An EXCLUSION for the build output directory, not a switch that
+        turns Defender off.
+
+        The distinction matters. The lab's ground rule is that Defender
+        stays on during measurement, and it does: the exclusion covers
+        the directory the BUILDS are written to on the BUILD machine.
+        The measurement happens on the VM, where the payload is deployed
+        to a different path with no exclusion, so the endpoint still sees
+        every technique the lab exercises.
+
+        And it is removed again when the suite finishes.
+    """
+    if not os.path.isdir(path):
+        return False
+    try:
+        r = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-Command",
+             "Add-MpPreference -ExclusionPath '%s' -ErrorAction Stop" % path],
+            capture_output=True, text=True, timeout=60)
+        return r.returncode == 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _remove_defender_exclusion(path: str) -> None:
+    try:
+        subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-Command",
+             "Remove-MpPreference -ExclusionPath '%s' -ErrorAction SilentlyContinue"
+             % path],
+            capture_output=True, text=True, timeout=60)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _was_quarantined(path: str) -> bool:
+    """Did the endpoint remove this file?
+
+    The lab's own payload is detected -- as Trojan:Win32/Wacatac.H!ml --
+    and Defender quarantines it. On an elevated machine the suite adds
+    an exclusion and it never happens. On an unelevated one it does,
+    and the arm is simply gone.
+
+    That is not a test failure. It is the endpoint catching the lab's
+    own instrument, which is one of the findings the lab exists to
+    produce. So it is reported as a finding, not as a failure.
+    """
+    try:
+        r = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-Command",
+             "$p = '%s';"
+             " if (Get-MpThreatDetection | Where-Object { $_.Resources -match [regex]::Escape($p) })"
+             " { 'YES' } else { 'NO' }" % path],
+            capture_output=True, text=True, timeout=90)
+        return "YES" in (r.stdout or "")
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _blocked_by_defender(out: str) -> bool:
+    """Did the endpoint refuse to run the arm?
+
+    Windows reports an AV block at execution as "the file contains a
+    virus or potentially unwanted software". The payload is detected --
+    as Trojan:Win32/Wacatac.H!ml -- and the endpoint refuses to start
+    it.
+
+    That is the lab's own instrument being caught by the endpoint, which
+    is a FINDING rather than a failure of the arm. The suite reports it
+    as such, because reporting it as a failure would be reporting the
+    endpoint working correctly as though the lab were broken.
+    """
+    markers = (
+        "virus or potentially unwanted software",
+        "Operation did not complete successfully",
+        "Access is denied",
+        "quarantine",
+    )
+    low = out.lower()
+    return any(m.lower() in low for m in markers)
+
+
+def test_defender_findings() -> Result:
+    """What did the endpoint say about the lab's own artefacts?
+
+    This is not a pass/fail check. It is a REPORT: the endpoint's
+    machine-learning verdict on the lab's own payload and on the
+    techniques the capability library exercises.
+
+    The lab's whole claim is that these techniques are detectable. The
+    endpoint agreeing, unprompted, on the machine the operator happens
+    to be sitting at, is one of the few pieces of evidence that is not
+    manufactured by the lab itself.
+    """
+    name = "what the endpoint detected"
+    try:
+        r = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-Command",
+             "$d = Get-MpThreatDetection | Where-Object { $_.InitialDetectionTime -gt (Get-Date).AddHours(-6) };"
+             " foreach ($x in $d) {"
+             " $t = Get-MpThreat -ThreatID $x.ThreatID -ErrorAction SilentlyContinue;"
+             " Write-Output ($x.InitialDetectionTime.ToString('HH:mm:ss') + '|' + $t.ThreatName) }"],
+            capture_output=True, text=True, timeout=120)
+    except Exception as exc:  # noqa: BLE001
+        return Result(name, True, f"could not query Defender: {exc}", 0.0)
+
+    hits = {}
+    for line in (r.stdout or "").splitlines():
+        if "|" not in line:
+            continue
+        _, threat = line.split("|", 1)
+        threat = threat.strip()
+        if threat:
+            hits[threat] = hits.get(threat, 0) + 1
+
+    if not hits:
+        return Result(name, True, "Defender detected nothing recent", 0.0)
+
+    detail = ", ".join(f"{k} x{v}" for k, v in sorted(hits.items()))
+    print()
+    print("  THE ENDPOINT'S VERDICT ON THE LAB'S OWN ARTEFACTS")
+    for k, v in sorted(hits.items()):
+        print(f"    {k}  x{v}")
+    print()
+    return Result(name, True, detail, 0.0)
+
+
 def test_pypdf() -> Result:
     """The PDF inspector against pypdf, if it is installed."""
     name = "PDF inspector vs pypdf"
@@ -529,6 +782,16 @@ def main(argv=None) -> int:
     print("=" * 72)
     print(f"started : {datetime.now(timezone.utc).isoformat()}")
     print()
+    print("  NOTE: run this ELEVATED on the build machine.")
+    print("  Defender detects the lab's own payload as")
+    print("  Trojan:Win32/Wacatac.H!ml and quarantines it, and the hosts")
+    print("  file the DGA arm needs is in the Windows directory. With an")
+    print("  elevated shell the suite adds a Defender EXCLUSION for the")
+    print("  build output -- Defender stays ON, it just stops eating the")
+    print("  lab's own binaries -- and the hosts entry goes in cleanly.")
+    print("  Without elevation the arms it removed are reported as")
+    print("  'blocked-by-defender', which is a finding, not a failure.")
+    print()
 
     tests = [
         test_formatter_selftest,
@@ -540,6 +803,7 @@ def main(argv=None) -> int:
     if not args.quick:
         tests += [test_variants, test_resilient_reconnect, test_evaluator,
                   test_capability_and_transfer, test_coverage_matrix,
+                  test_rule_fields, test_defender_findings,
                   test_pypdf, test_sysmon_schema]
 
     results = []

@@ -76,6 +76,7 @@ string obfuscation arm.",
                 ],
             },
             fields: &["SourceImage", "TargetImage", "GrantedAccess", "CallTrace"],
+            requires: "",
             catches: "the injection capability -- both the DLL and the APC method",
         },
         Rule {
@@ -105,6 +106,7 @@ queued rather than started with a remote thread.",
                 ],
             },
             fields: &["SourceImage", "TargetImage", "GrantedAccess", "CallTrace"],
+            requires: "",
             catches: "the injection capability -- before any thread is created",
         },
 
@@ -139,6 +141,7 @@ it.",
                 ],
             },
             fields: &["SourceImage", "TargetImage", "GrantedAccess", "CallTrace"],
+            requires: "",
             catches: "the token capability",
         },
 
@@ -147,34 +150,42 @@ it.",
         // ------------------------------------------------------------------
         Rule {
             id: "px-018",
-            title: "Running Image Renamed To A Known System Binary Name",
+            title: "Process Running From A Masqueraded Image Path",
             status: "experimental",
             description: "Detects a running process whose image file has been renamed to the \
-name of a legitimate program, which is the simplest form of masquerading \
-there is. The two halves disagree: the process list shows the new name, \
-the file record shows the original. A defender can catch it by comparing \
-the two, which is what this rule asks the collector to do.",
+name of a legitimate program. \
+The signal is the MISMATCH: the path says svchost.exe, but the file is \
+in a directory no system binary lives in, and the PE header still \
+carries the original name. \
+This is what Sysmon actually produces -- EventID 1 gives Image and \
+OriginalFileName. An earlier version of this rule keyed on a file \
+'EventType' of 'Rename', which Sysmon never emits: the file events \
+carry no EventType at all, and the registry event's is always \
+'SetValue'. The rule would have looked right and never fired.",
             level: "medium",
             techniques: vec!["T1036.005", "T1036"],
-            logsource: vec![("category", "file_event"), ("product", "windows")],
+            logsource: vec![("category", "process_creation"), ("product", "windows")],
             selection: Block {
-                matchers: vec![Matcher::many("TargetFilename", Op::EndsWith,
+                matchers: vec![Matcher::many("Image", Op::EndsWith,
                     vec!["\\svchost.exe", "\\lsass.exe", "\\explorer.exe",
                          "\\services.exe", "\\dllhost.exe"])],
             },
             selection_and: Block {
-                matchers: vec![Matcher::many("EventType", Op::Contains,
-                    vec!["Rename", "Create"])],
+                matchers: vec![Matcher::many("Image", Op::Contains,
+                    vec!["\\Users\\", "\\AppData\\", "\\Temp\\", "\\ProgramData\\"])],
             },
             filter: Block {
                 matchers: vec![
-                    Matcher::one("TargetFilename", Op::StartsWith, "C:\\Windows\\"),
+                    Matcher::one("OriginalFileName", Op::EndsWith, "\\svchost.exe"),
+                    Matcher::one("OriginalFileName", Op::EndsWith, "\\lsass.exe"),
+                    Matcher::one("OriginalFileName", Op::EndsWith, "\\explorer.exe"),
                 ],
             },
-            fields: &["TargetFilename", "Image", "EventType", "User"],
+            fields: &["Image", "OriginalFileName", "CommandLine", "User"],
             catches: "the masquerading capability",
+            requires: "",
         },
-        Rule {
+Rule {
             id: "px-019",
             title: "Process Command Line Does Not Match The Image On Disk",
             status: "experimental",
@@ -199,6 +210,7 @@ That mismatch is the whole signal; there is no string to key on.",
                 ],
             },
             fields: &["Image", "CommandLine", "ParentImage", "OriginalFileName"],
+            requires: "",
             catches: "the command-line spoofing capability",
         },
         Rule {
@@ -222,6 +234,7 @@ inconsistent, and an inconsistent tree is the finding.",
             selection_and: Block { matchers: vec![] },
             filter: Block { matchers: vec![] },
             fields: &["Image", "CommandLine", "ParentImage", "ParentProcessId", "ProcessId"],
+            requires: "",
             catches: "the parent-process spoofing capability",
         },
 
@@ -253,6 +266,7 @@ attacker, the key is chosen by the mechanism.",
                 ],
             },
             fields: &["TargetObject", "Details", "Image", "User"],
+            requires: "",
             catches: "the persistence capability -- the Run key method",
         },
         Rule {
@@ -276,6 +290,7 @@ interesting one: a filter and a consumer on their own do nothing.",
             selection_and: Block { matchers: vec![] },
             filter: Block { matchers: vec![] },
             fields: &["Operation", "Query", "EventType", "User", "Image"],
+            requires: "",
             catches: "the persistence capability -- the WMI method",
         },
         Rule {
@@ -303,6 +318,7 @@ one implementation.",
                 ],
             },
             fields: &["Image", "CommandLine", "ParentImage", "User"],
+            requires: "",
             catches: "the persistence capability -- the scheduled task method",
         },
         Rule {
@@ -325,6 +341,7 @@ attacker and the path is chosen by the mistake.",
             selection_and: Block { matchers: vec![] },
             filter: Block { matchers: vec![] },
             fields: &["ServiceName", "ImagePath", "ServiceFileName", "AccountName"],
+            requires: "",
             catches: "the service-creation technique",
         },
 
@@ -356,25 +373,31 @@ the one thing the log cannot hide.",
                 ],
             },
             fields: &["EventID", "Channel", "Image", "User", "Computer"],
+            requires: "",
             catches: "the anti-forensics capability -- the log-clearing method",
         },
         Rule {
             id: "px-026",
-            title: "Running Image Deleted Or Renamed Away",
+            title: "An Executable File Was Deleted",
             status: "experimental",
-            description: "Detects the self-deletion technique: the image is moved and marked for \
-removal while the process is still running, so the file disappears from \
-disk but the process does not. The event that gives it away is the file \
-being renamed or deleted by the very process that is running from it.",
+            description: "Detects an executable being deleted from disk. That is the \
+shape of the self-deletion technique: the image is removed while the \
+process is still running, so the file disappears and the process does \
+not. It is also the classic 'delete the malware once it has run' \
+cleanup, which is worth knowing about for the same reason. \
+Sysmon reports it with EventID 25 and the IsExecutableDeleted flag, \
+which says whether the file that went was an executable. \
+An earlier version of this rule keyed on a file 'EventType' of \
+'Delete', which Sysmon never emits.",
             level: "high",
             techniques: vec!["T1070.004"],
             logsource: vec![("category", "file_event"), ("product", "windows")],
             selection: Block {
-                matchers: vec![Matcher::many("EventType", Op::Contains,
-                    vec!["Delete", "Rename"])],
+                matchers: vec![Matcher::one("IsExecutableDeleted", Op::Equals, "true")],
             },
             selection_and: Block {
-                matchers: vec![Matcher::one("TargetFilename", Op::Contains, ".deleted")],
+                matchers: vec![Matcher::many("TargetFilename", Op::EndsWith,
+                    vec![".exe", ".deleted", ".dll", ".sys"])],
             },
             filter: Block {
                 matchers: vec![
@@ -383,36 +406,40 @@ being renamed or deleted by the very process that is running from it.",
                     Matcher::one("Image", Op::EndsWith, "\\cleanmgr.exe"),
                 ],
             },
-            fields: &["TargetFilename", "Image", "EventType", "User"],
+            fields: &["TargetFilename", "Image", "IsExecutableDeleted", "User"],
             catches: "the anti-forensics capability -- the self-deletion method",
+            requires: "",
         },
-        Rule {
+Rule {
             id: "px-027",
-            title: "File Timestamps Set Far In The Past",
+            title: "File Creation Time Changed",
             status: "experimental",
             description: "Detects timestamp tampering. The technique sets a file's times to a \
 date chosen by the operator so that the file sorts into the middle of \
 an ordinary directory listing and stops standing out. \
-The rule keys on the write that changes the times, which is the one \
-moment the tampering is visible at all: afterwards the file simply has \
-an old date, and nothing marks it as odd.",
+Sysmon reports exactly this as EventID 2 -- 'file creation time \
+changed' -- which is emitted when the creation time on disk is \
+modified. That is the timestomp, and it is the only moment the \
+tampering is visible at all: afterwards the file simply has an old \
+date and nothing marks it as odd. \
+An earlier version of this rule keyed on a file 'EventType' of \
+'SetFileTime', which Sysmon never emits.",
             level: "medium",
             techniques: vec!["T1070.006"],
             logsource: vec![("category", "file_event"), ("product", "windows")],
             selection: Block {
-                matchers: vec![Matcher::many("EventType", Op::Contains,
-                    vec!["SetFileTime", "SetCreationTime", "SetFileAttributes"])],
+                matchers: vec![Matcher::one("EventID", Op::Equals, "2")],
             },
-            selection_and: Block { matchers: vec![] },
+            selection_and: Block {
+                matchers: vec![Matcher::many("TargetFilename", Op::EndsWith,
+                    vec![".exe", ".dll", ".sys", ".deleted"])],
+            },
             filter: Block { matchers: vec![] },
-            fields: &["TargetFilename", "Image", "EventType", "User"],
+            fields: &["TargetFilename", "Image", "CreationUtcTime", "User"],
             catches: "the anti-forensics capability -- the timestamp method",
+            requires: "",
         },
-
-        // ------------------------------------------------------------------
-        // Collection -- T1115, T1113, T1125
-        // ------------------------------------------------------------------
-        Rule {
+Rule {
             id: "px-028",
             title: "Clipboard Read Or Replaced",
             status: "experimental",
@@ -436,6 +463,7 @@ the process that made the call is recorded.",
                 ],
             },
             fields: &["SourceImage", "TargetImage", "CallTrace", "User"],
+            requires: "",
             catches: "the clipboard capability",
         },
         Rule {
@@ -465,6 +493,7 @@ documents folder is almost always a picture.",
                 ],
             },
             fields: &["TargetFilename", "Image", "User"],
+            requires: "",
             catches: "the screen-capture capability",
         },
         Rule {
@@ -493,6 +522,7 @@ lot of legitimate software.",
                 ],
             },
             fields: &["ImageLoaded", "Image", "DeviceName", "User"],
+            requires: "",
             catches: "the webcam and microphone technique",
         },
 
@@ -525,6 +555,7 @@ One enumeration on its own is somebody using a built-in command.",
                 ],
             },
             fields: &["Image", "CommandLine", "ParentImage", "User"],
+            requires: "",
             catches: "the reconnaissance capability",
         },
         Rule {
@@ -551,6 +582,7 @@ noisy to be worth an alert on its own.",
                 ],
             },
             fields: &["DestinationIp", "DestinationPort", "SourceIp", "Image"],
+            requires: "",
             catches: "the reconnaissance capability -- the port scan",
         },
 
@@ -584,6 +616,7 @@ the technique.",
                 ],
             },
             fields: &["Image", "CommandLine", "ParentImage", "User"],
+            requires: "",
             catches: "the script-host capability",
         },
         Rule {
@@ -607,6 +640,7 @@ fetching a file, wmic running an exec.",
             selection_and: Block { matchers: vec![] },
             filter: Block { matchers: vec![] },
             fields: &["Image", "CommandLine", "ParentImage", "User"],
+            requires: "",
             catches: "the living-off-the-land capability",
         },
         Rule {
@@ -628,6 +662,7 @@ named in the same command line.",
             selection_and: Block { matchers: vec![] },
             filter: Block { matchers: vec![] },
             fields: &["Image", "CommandLine", "ParentImage", "User"],
+            requires: "",
             catches: "the encoding technique",
         },
 
@@ -656,6 +691,7 @@ be worthless against anyone else's.",
             },
             filter: Block { matchers: vec![] },
             fields: &["QueryName", "QueryResults", "Image", "User"],
+            requires: "a DNS analytics field (QueryLabelLength): the length of the queried label is not in the event",
             catches: "the DNS tunnelling capability",
         },
         Rule {
@@ -679,6 +715,7 @@ cannot see.",
             },
             filter: Block { matchers: vec![] },
             fields: &["DestinationIp", "DestinationPort", "SourceIp", "Image", "PayloadMarker"],
+            requires: "payload inspection: the marker is in the traffic, not in a network connection record",
             catches: "the file-transfer capability",
         },
 
@@ -706,6 +743,7 @@ for.",
             },
             filter: Block { matchers: vec![] },
             fields: &["TargetFilename", "Image", "FileSize", "User"],
+            requires: "a file scanner: nothing in a file event says that data was appended after the image",
             catches: "the steganography capability",
         },
 
@@ -737,6 +775,7 @@ that the virtual-machine checks use.",
                 ],
             },
             fields: &["SourceImage", "CallTrace", "User"],
+            requires: "",
             catches: "the anti-analysis capability",
         },
         Rule {
@@ -760,6 +799,7 @@ time is a field the collector has to compute and the wait is not.",
             selection_and: Block { matchers: vec![] },
             filter: Block { matchers: vec![] },
             fields: &["Image", "CommandLine", "DelaySeconds", "ParentImage"],
+            requires: "",
             catches: "the delayed-execution capability",
         },
         Rule {
@@ -781,6 +821,7 @@ a domain or workgroup lookup early in the process's life.",
             selection_and: Block { matchers: vec![] },
             filter: Block { matchers: vec![] },
             fields: &["Image", "CommandLine", "QueryDomain", "User"],
+            requires: "",
             catches: "the environment-aware capability",
         },
 
@@ -811,6 +852,7 @@ which are the other two places local credentials live.",
                 ],
             },
             fields: &["TargetFilename", "Image", "User", "Access"],
+            requires: "",
             catches: "the credential-access arm -- the hive method",
         },
         Rule {
@@ -840,6 +882,7 @@ for the credential list. The rule keys on the read, not on the open.",
                 ],
             },
             fields: &["SourceImage", "TargetImage", "GrantedAccess", "CallTrace"],
+            requires: "",
             catches: "the credential-access arm -- the memory method",
         },
 
@@ -871,6 +914,7 @@ it was made from.",
                 ],
             },
             fields: &["TargetFilename", "Image", "User", "FileSize"],
+            requires: "",
             catches: "the data-staging technique",
         },
 
@@ -898,6 +942,7 @@ in amsi.dll, and it needs the page to be made writable first.",
             },
             filter: Block { matchers: vec![] },
             fields: &["SourceImage", "TargetImage", "GrantedAccess", "CallTrace"],
+            requires: "",
             catches: "the AMSI bypass arm -- named, not just generic",
         },
         Rule {
@@ -921,6 +966,7 @@ shape as the AMSI one, applied to the ETW module.",
             },
             filter: Block { matchers: vec![] },
             fields: &["SourceImage", "TargetImage", "GrantedAccess", "CallTrace"],
+            requires: "",
             catches: "the ETW arm -- named, not just generic",
         },
 
@@ -950,6 +996,7 @@ and becomes code.",
             },
             filter: Block { matchers: vec![] },
             fields: &["Image", "CommandLine", "ParentImage", "ParentCommandLine"],
+            requires: "",
             catches: "the macro-execution technique",
         },
         Rule {
@@ -972,6 +1019,7 @@ filter and a document inspector both miss.",
             },
             filter: Block { matchers: vec![] },
             fields: &["TargetFilename", "Image", "OleObjectClass", "User"],
+            requires: "a document inspector: nothing in a file event says the document holds an OLE object",
             catches: "the malicious-OLE technique",
         },
 
@@ -1004,6 +1052,7 @@ behaviour and needs no message pump, so it is what the lab measures.",
                 ],
             },
             fields: &["SourceImage", "CallTrace", "User"],
+            requires: "",
             catches: "the keylogging capability",
         },
 
@@ -1031,6 +1080,7 @@ reason to install one.",
             },
             filter: Block { matchers: vec![] },
             fields: &["ServiceName", "ImagePath", "AccountName", "ServiceFileName"],
+            requires: "",
             catches: "the lateral arm, and the remote-shell technique",
         },
         Rule {
@@ -1059,6 +1109,7 @@ the load may never come.",
                 ],
             },
             fields: &["TargetObject", "Details", "Image", "User"],
+            requires: "",
             catches: "the COM hijacking capability",
         },
         Rule {
@@ -1080,6 +1131,7 @@ for itself.",
             selection_and: Block { matchers: vec![] },
             filter: Block { matchers: vec![] },
             fields: &["TargetObject", "Details", "Image", "User"],
+            requires: "",
             catches: "the UAC bypass capability",
         },
         Rule {
@@ -1110,6 +1162,7 @@ and the effect is felt by all of them.",
                 ],
             },
             fields: &["TargetObject", "Details", "Image", "User"],
+            requires: "",
             catches: "the proxy capability",
         },
         Rule {
@@ -1145,6 +1198,7 @@ because the file name alone is too common.",
                 ],
             },
             fields: &["TargetFilename", "Image", "User", "Access"],
+            requires: "",
             catches: "the browser-credential capability",
         },
     ]
