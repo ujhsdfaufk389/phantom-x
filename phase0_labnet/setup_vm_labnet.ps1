@@ -64,6 +64,7 @@ param(
     [int]$C2Port = 9001,
     [string]$LabSubnet = '192.168.77.0/24',
     [switch]$AllowDhcp,
+    [switch]$Tailscale,
     [string]$RulePrefix = 'PHANTOM-X LabVM'
 )
 
@@ -226,6 +227,73 @@ if ($AllowDhcp) {
             -Protocol UDP -RemotePort 67,68 -ErrorAction SilentlyContinue | Out-Null
         Write-Host '  allowed DHCP.' -ForegroundColor Green
     }
+}
+
+# ---------------------------------------------------------------------------
+# 2b. Tailscale
+#
+# WHY THIS IS NEEDED
+#     Tailscale is a WireGuard mesh. It reaches the control plane and the
+#     DERP relays over the ordinary internet, and it answers its own
+#     name lookups on 100.100.100.100. A default-deny egress rule stops
+#     all of that, and the tunnel never comes up -- which looks exactly
+#     like "the lab is broken" and is not.
+#
+#     So the tunnel gets its own narrow allowance, and the lab's C2 rule
+#     then points at the C2's TAILNET address.
+#
+# WHY THAT IS THE GOOD PART
+#     The reason the lab's C2 rule names a HOST rather than an address
+#     is that the operator's machine moves between networks and the C2's
+#     address changes with it. On a tailnet the C2 has a FIXED 100.x
+#     address that never changes, whatever the network under it does.
+#     The problem the rule was written to solve disappears.
+#
+#     And the VM stays isolated: Tailscale's own ACLs decide what the
+#     tailnet can reach, and the default-deny still stops the VM
+#     reaching the ordinary internet.
+# ---------------------------------------------------------------------------
+if ($Tailscale) {
+    Write-Section '2b. Tailscale'
+
+    $tsName = "$RulePrefix - Allow Tailscale"
+    Remove-NetFirewallRule -Name $tsName -ErrorAction SilentlyContinue
+
+    # The direct WireGuard path, and the DERP relays when the direct one
+    # is not available.
+    New-NetFirewallRule -Name $tsName -DisplayName $tsName `
+        -Direction Outbound -Action Allow -Enabled True -Profile Any `
+        -Protocol UDP -RemotePort 41641 -ErrorAction SilentlyContinue | Out-Null
+
+    # The relay path: HTTPS to the DERP servers. Without it the tunnel
+    # still comes up, but it goes through a relay and is slower.
+    $tsDerp = "$RulePrefix - Allow Tailscale relays"
+    Remove-NetFirewallRule -Name $tsDerp -ErrorAction SilentlyContinue
+    New-NetFirewallRule -Name $tsDerp -DisplayName $tsDerp `
+        -Direction Outbound -Action Allow -Enabled True -Profile Any `
+        -Protocol TCP -RemotePort 443 `
+        -RemoteAddress @('controlplane.tailscale.com', '*.ts.net') `
+        -ErrorAction SilentlyContinue | Out-Null
+
+    # MagicDNS. The name the payload resolves is answered here.
+    $tsDns = "$RulePrefix - Allow Tailscale MagicDNS"
+    Remove-NetFirewallRule -Name $tsDns -ErrorAction SilentlyContinue
+    New-NetFirewallRule -Name $tsDns -DisplayName $tsDns `
+        -Direction Outbound -Action Allow -Enabled True -Profile Any `
+        -Protocol UDP -RemotePort 53 -RemoteAddress 100.100.100.100 `
+        -ErrorAction SilentlyContinue | Out-Null
+
+    Write-Host '  allowed UDP/41641 (the direct WireGuard path).' -ForegroundColor Green
+    Write-Host '  allowed TCP/443 to the control plane and the relays.' -ForegroundColor Green
+    Write-Host '  allowed UDP/53 to 100.100.100.100 (MagicDNS).' -ForegroundColor Green
+    Write-Host ''
+    Write-Host '  Now point the C2 rule at the tailnet address:' -ForegroundColor White
+    Write-Host ''
+    Write-Host '      .\setup_vm_labnet.ps1 -Tailscale -LabGateway 100.x.y.z -C2Port 9001' -ForegroundColor Cyan
+    Write-Host ''
+    Write-Host '  or at the MagicDNS name, which is what the rule prefers:' -ForegroundColor Cyan
+    Write-Host ''
+    Write-Host '      .\setup_vm_labnet.ps1 -Tailscale -LabGateway c2box.tail1234.ts.net -C2Port 9001' -ForegroundColor Cyan
 }
 
 # ---------------------------------------------------------------------------
