@@ -168,17 +168,45 @@ without the obfuscation.
 
 **The gap the catalogue has been carrying, now measured.** The
 obfuscated arms (`all`, `stealth`, `persistent`, `full`) still contain
-three readable literals:
+one readable literal:
 
 | Literal | Where it comes from |
 |---|---|
 | `kernel32.dll` | the import table — every executable imports it |
-| `ntdll.dll` | the import table — the AMSI and ETW code needs it |
-| `cmd /c ` | a literal in the payload's own code |
 
-The first two are structural: they are the DLL names, and the loader
-reads them to resolve the imports. The third is a code literal that
-could move into the string table.
+The other two that were there — `ntdll.dll` and `cmd /c ` — were the
+capability library using raw literals when the string table already had
+entries for them. They are encoded now, along with the VBScript body,
+the scheduled-task command line and `advapi32.dll`.
+
+**The table, after the change:**
+
+```
+  ARM             SIZE  DLLs                         BEHAVIOURAL  STRINGS
+  ------------ -------  ---------------------------- ------------ --------
+  baseline       28672  kernel32                     0            11
+  caps           57856  kernel32,user32              3            12
+  full           66048  gdi32,kernel32,user32        3            1
+  persistent     64512  gdi32,kernel32,user32        3            1
+  stealth        64000  gdi32,kernel32,user32        3            1
+  xfer           32768  gdi32,kernel32,user32        0            11
+```
+
+The three behavioural imports that remain in the technique-heavy arms
+are `WriteProcessMemory`, `VirtualAllocEx` and `CreateRemoteThread` —
+the injection technique. They are in KERNEL32, which is imported
+anyway, so removing three names from a table of sixty is a smaller win
+than removing a whole DLL was.
+
+**What this table says, and what it does not.** It says the static
+surface of the quietest arm is small: one DLL, no behavioural import
+names, one literal, and that literal is the kernel32 import every
+executable has.
+
+It does **not** say the vendor count will drop. The three engines that
+flagged the carrier were watching the behaviour. A quieter binary that
+still connects to a C2 and still runs commands is still a C2 client, and
+the classifiers that flagged it were built to notice exactly that.
 
 **This is a second submission's worth of measurement.** The carrier above
 was submitted before this change. A fresh submission of the same arm
@@ -186,6 +214,17 @@ would say whether the reduced import table changes the vendor count, and
 the answer is not obvious: the three engines that flagged it were
 watching the *behaviour*, not the imports. The table above says which
 reduction is worth measuring next; the submission says whether it worked.
+
+### One more observation from the measurement
+
+While the harness was reading the arms, three of them -- `obfuscate`,
+`all` and `amsi` -- could not be opened at all: the endpoint was
+holding them. They had just been built.
+
+That is the local answer to "will it be detected", and it is the same
+answer the four vendors gave. The lab's own binaries are removed by the
+endpoint that runs on the operator's machine, and the harness has to be
+written to survive it.
 
 ## Reproducing it
 

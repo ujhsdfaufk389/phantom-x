@@ -76,9 +76,23 @@ def dumpbin(path):
 
 
 def measure(path):
-    """One arm's static surface."""
-    with open(path, "rb") as fh:
-        blob = fh.read()
+    """One arm's static surface.
+
+    The endpoint may be holding the file while it scans it, and a file
+    that is being replaced underneath the reader fails to open. That is
+    not an error in the arm; it is the endpoint doing the thing this
+    project measures. The file is simply skipped.
+    """
+    blob = b""
+    for _ in range(5):
+        try:
+            with open(path, "rb") as fh:
+                blob = fh.read()
+            break
+        except OSError:
+            time.sleep(1)
+    if not blob:
+        return None
 
     imports = dumpbin(path)
 

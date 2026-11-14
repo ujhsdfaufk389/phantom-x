@@ -126,3 +126,11 @@
     X(SCHTASKS, "schtasks.exe")                                            \
     X(CREATEREMOTE, "CreateRemoteThread")                                  \
     /* --- marker file --------------------------------------------------- */  \
+    /* --- the capability library's own literals ------------------------ */  \
+    /* The capability library used raw literals for the DLL names and    */  \
+    /* the command lines, which left them readable in the binary even    */  \
+    /* in the obfuscated arms. The table already had entries for some    */  \
+    /* of them -- they were simply not being used.                        */  \
+    X(ADVAPI32, "advapi32.dll")                                           \
+    X(VBSCRIPT_BODY, "var s = new ActiveXObject(\"WScript.Shell\");\r\ns.Run(\"cmd /c echo PHANTOMX_SCRIPT_HOST\");\r\n") \
+    X(SCHTASKS_CREATE, "schtasks /create /tn PXLabTask /tr \"cmd /c echo PHANTOMX_SCHTASK\" /sc once /st 23:59 /f") \

