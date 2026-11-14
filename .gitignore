@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 phase1_pdf/quarantine/
 phase6_reports/*.raw
+# the endpoint hook report is machine-specific; the tool is what matters
+phase6_reports/endpoint_hooks*.json
 phase3_fileless/loader/*.exe
 phase3_fileless/loader/px_payload_running.txt
 phase3_fileless/loader/px_payload_log.txt

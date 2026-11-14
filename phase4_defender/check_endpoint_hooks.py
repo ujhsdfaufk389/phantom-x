@@ -98,6 +98,11 @@ PAGE_NOACCESS = 0x01
 # The exports compared between the disk copy and the loaded copy. These
 # are the ones a security product patches most often, and they are
 # stable across Windows versions.
+#
+# NtSetInformationProcess and NtProtectVirtualMemory are the ones an
+# EDR hooks for process and memory operations; NtWriteVirtualMemory and
+# NtCreateThreadEx for injection; NtOpenProcess and
+# NtAllocateVirtualMemory for the handle and the allocation.
 WATCHED_EXPORTS = [
     "NtAllocateVirtualMemory",
     "NtOpenProcess",
@@ -105,6 +110,18 @@ WATCHED_EXPORTS = [
     "NtCreateThreadEx",
     "NtProtectVirtualMemory",
     "NtSetInformationProcess",
+]
+
+# The modules and the exports worth comparing.
+#
+# EtwEventWrite is in ntdll, and it is the one the lab's OWN ETW arm
+# patches -- so a scan that does not watch it cannot find the lab's own
+# evasion. AmsiScanBuffer is in amsi, and it is the one the AMSI arm
+# patches.
+WATCHED_MODULES = [
+    ("ntdll.dll", WATCHED_EXPORTS),
+    ("ntdll.dll", ["EtwEventWrite"]),
+    ("amsi.dll", ["AmsiScanBuffer"]),
 ]
 
 
@@ -192,11 +209,18 @@ def _export_rvas(blob):
     return out
 
 
-def check_ntdll_hooks(system_dir=None):
-    """Compare ntdll on disk with ntdll in memory."""
+def check_module_hooks(dll_name, export_names, system_dir=None):
+    """Compare one module on disk with the copy in memory.
+
+    The module does not have to be loaded in this process: the point is
+    to compare the FILE with what is loaded SOMEWHERE, so the check
+    looks at the running process it is given, and this process's own
+    copy is used only when it is the one being asked about.
+    """
     system_dir = system_dir or os.environ.get("SystemRoot", r"C:\Windows")
-    path = os.path.join(system_dir, "System32", "ntdll.dll")
-    result = {"path": path, "exports": {}, "hooked": []}
+    path = os.path.join(system_dir, "System32", dll_name)
+    result = {"module": dll_name, "path": path, "exports": {},
+              "hooked": [], "loaded": False}
 
     try:
         blob = _read_disk(path)
@@ -207,7 +231,7 @@ def check_ntdll_hooks(system_dir=None):
     sections = _pe_sections(blob)
     exports = _export_rvas(blob)
 
-    for name in WATCHED_EXPORTS:
+    for name in export_names:
         rva = exports.get(name)
         if not rva:
             result["exports"][name] = {"status": "not exported"}
@@ -219,12 +243,13 @@ def check_ntdll_hooks(system_dir=None):
         disk_bytes = blob[disk_off:disk_off + 16]
 
         try:
-            live = ctypes.cast(getattr(ntdll, name),
-                               ctypes.c_void_p).value
-        except AttributeError:
-            result["exports"][name] = {"status": "not in this ntdll"}
+            mod = ctypes.WinDLL(dll_name)
+            live = ctypes.cast(getattr(mod, name), ctypes.c_void_p).value
+        except (AttributeError, OSError):
+            result["exports"][name] = {"status": "module not loaded here"}
             continue
 
+        result["loaded"] = True
         mem_bytes = ctypes.string_at(live, 16)
         same = disk_bytes == mem_bytes
         result["exports"][name] = {
@@ -236,6 +261,147 @@ def check_ntdll_hooks(system_dir=None):
         if not same:
             result["hooked"].append(name)
     return result
+
+
+class MODULEENTRY32W(ctypes.Structure):
+    _fields_ = [
+        ("dwSize", wintypes.DWORD),
+        ("th32ModuleID", wintypes.DWORD),
+        ("th32ProcessID", wintypes.DWORD),
+        ("GlblcntUsage", wintypes.DWORD),
+        ("ProccntUsage", wintypes.DWORD),
+        ("modBaseAddr", ctypes.POINTER(ctypes.c_ubyte)),
+        ("modBaseSize", wintypes.DWORD),
+        ("hModule", wintypes.HMODULE),
+        ("szModule", wintypes.WCHAR * 256),
+        ("szExePath", wintypes.WCHAR * 260),
+    ]
+
+
+TH32CS_SNAPMODULE = 0x00000008
+TH32CS_SNAPMODULE32 = 0x00000010
+
+kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+kernel32.Module32FirstW.restype = wintypes.BOOL
+kernel32.Module32FirstW.argtypes = [wintypes.HANDLE,
+                                    ctypes.POINTER(MODULEENTRY32W)]
+kernel32.Module32NextW.restype = wintypes.BOOL
+kernel32.Module32NextW.argtypes = [wintypes.HANDLE,
+                                   ctypes.POINTER(MODULEENTRY32W)]
+
+
+def _module_bases(pid):
+    """The base address of every module in a process."""
+    bases = {}
+    snap = kernel32.CreateToolhelp32Snapshot(
+        TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid)
+    if not snap or snap == -1:
+        return bases
+    entry = MODULEENTRY32W()
+    entry.dwSize = ctypes.sizeof(MODULEENTRY32W)
+    if kernel32.Module32FirstW(snap, ctypes.byref(entry)):
+        while True:
+            name = entry.szModule.lower()
+            if name and name not in bases:
+                bases[name] = int(ctypes.cast(entry.modBaseAddr,
+                                             ctypes.c_void_p).value or 0)
+            if not kernel32.Module32NextW(snap, ctypes.byref(entry)):
+                break
+    kernel32.CloseHandle(snap)
+    return bases
+
+
+def check_target_modules(pid, system_dir=None):
+    """Compare the modules of ANOTHER process against the files on disk.
+
+    This is the check that finds the lab's OWN evasion. Comparing the
+    disk file against this process's own copy proves nothing about a
+    target: the target's copy is what was patched.
+
+    The export's address in the target is the module base plus the
+    export's RVA, which is the same offset the file uses.
+    """
+    system_dir = system_dir or os.environ.get("SystemRoot", r"C:\Windows")
+    handle = kernel32.OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+                                  False, pid)
+    if not handle:
+        return {"pid": pid, "error": "OpenProcess failed"}
+
+    bases = _module_bases(pid)
+    out = {"pid": pid, "modules": [], "patched": []}
+
+    for dll_name, export_names in WATCHED_MODULES:
+        path = os.path.join(system_dir, "System32", dll_name)
+        try:
+            blob = _read_disk(path)
+        except OSError as exc:
+            out["modules"].append({"module": dll_name, "error": str(exc)})
+            continue
+
+        sections = _pe_sections(blob)
+        exports = _export_rvas(blob)
+        base = bases.get(dll_name.lower())
+        entry = {"module": dll_name, "base": hex(base) if base else None,
+                 "exports": {}}
+
+        if not base:
+            entry["exports"] = {n: {"status": "not loaded in the target"}
+                                for n in export_names}
+            out["modules"].append(entry)
+            continue
+
+        for name in export_names:
+            rva = exports.get(name)
+            if not rva:
+                entry["exports"][name] = {"status": "not exported"}
+                continue
+            disk_off = _rva_to_offset(sections, rva)
+            if disk_off is None:
+                entry["exports"][name] = {"status": "no file offset"}
+                continue
+            disk_bytes = blob[disk_off:disk_off + 16]
+
+            addr = base + rva
+            buf = ctypes.create_string_buffer(16)
+            got = ctypes.c_size_t(0)
+            ok = kernel32.ReadProcessMemory(handle, ctypes.c_void_p(addr),
+                                           buf, 16, ctypes.byref(got))
+            if not ok or got.value < 8:
+                entry["exports"][name] = {"status": "could not be read"}
+                continue
+            mem_bytes = buf.raw[:got.value]
+            same = mem_bytes[:16] == disk_bytes
+            entry["exports"][name] = {
+                "rva": hex(rva),
+                "address": hex(addr),
+                "disk": disk_bytes[:8].hex(),
+                "memory": mem_bytes[:8].hex(),
+                "same": same,
+            }
+            if not same:
+                out["patched"].append(f"{dll_name}!{name}")
+
+        out["modules"].append(entry)
+
+    kernel32.CloseHandle(handle)
+    return out
+
+
+def check_ntdll_hooks(system_dir=None):
+    """The modules worth comparing, as one report."""
+    out = {"modules": [], "hooked": []}
+    seen = set()
+    for dll_name, names in WATCHED_MODULES:
+        key = (dll_name, tuple(names))
+        if key in seen:
+            continue
+        seen.add(key)
+        m = check_module_hooks(dll_name, names, system_dir)
+        out["modules"].append(m)
+        for h in m.get("hooked", []):
+            out["hooked"].append(f"{dll_name}!{h}")
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -420,6 +586,7 @@ def main():
         "kernel_callbacks": kernel_callback_note(),
     }
     if args.pid:
+        report["target_modules"] = check_target_modules(args.pid)
         report["syscall_stubs"] = scan_syscall_stubs(args.pid, args.scan_mb)
 
     print("=" * 74)
@@ -428,17 +595,22 @@ def main():
     print()
 
     ntd = report["ntdll"]
-    print("  IS ntdll HOOKED?")
-    print("  (disk against memory, for the exports a security product "
-          "patches)")
-    for name, info in ntd.get("exports", {}).items():
-        if "same" in info:
-            mark = "same" if info["same"] else "DIFFERENT"
-            print(f"    {name:<28} {mark}")
-        else:
-            print(f"    {name:<28} ({info.get('status')})")
+    print("  IS A MODULE HOOKED OR PATCHED?")
+    print("  (the bytes on disk against the bytes in memory, for the")
+    print("   functions a security product patches -- and the two the")
+    print("   lab's OWN evasion arms patch)")
+    for m in ntd.get("modules", []):
+        print(f"    {m['module']}")
+        for name, info in m.get("exports", {}).items():
+            if "same" in info:
+                mark = "same" if info["same"] else "DIFFERENT"
+                print(f"      {name:<26} {mark}")
+            else:
+                print(f"      {name:<26} ({info.get('status')})")
     if ntd.get("hooked"):
-        print(f"    -> {len(ntd['hooked'])} export(s) differ from disk")
+        print(f"    -> PATCHED: {', '.join(ntd['hooked'])}")
+    else:
+        print("    -> nothing differs from disk")
     print()
 
     f = report["filters"]
@@ -457,6 +629,28 @@ def main():
     print(f"    why: {kc['why']}")
     print(f"    a defender: {kc['what_a_defender_does']}")
     print()
+
+    if "target_modules" in report:
+        tm = report["target_modules"]
+        print("  THE TARGET PROCESS'S OWN MODULES")
+        print("  (the target's copy of the module, against the file on disk)")
+        if "error" in tm:
+            print(f"    {tm['error']}")
+        else:
+            for m in tm.get("modules", []):
+                print(f"    {m['module']}  base={m.get('base')}")
+                for name, info in m.get("exports", {}).items():
+                    if "same" in info:
+                        mark = "same" if info["same"] else "PATCHED"
+                        print(f"      {name:<26} {mark}")
+                    else:
+                        print(f"      {name:<26} ({info.get('status')})")
+            if tm.get("patched"):
+                print(f"    -> PATCHED IN THE TARGET: "
+                      f"{', '.join(tm['patched'])}")
+            else:
+                print("    -> nothing in the target differs from disk")
+        print()
 
     if "syscall_stubs" in report:
         s = report["syscall_stubs"]
