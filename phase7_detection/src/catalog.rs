@@ -571,7 +571,7 @@ pub fn catalog() -> Vec<Technique> {
             id: "T1082",
             tactic: "discovery",
             name: "System Information Discovery",
-            capability: "recon",
+            capability: "avstatus",
             arm: "",
             telemetry: "process_creation (systeminfo, GetNativeSystemInfo)",
             rules: "px-031",

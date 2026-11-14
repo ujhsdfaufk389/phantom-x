@@ -134,3 +134,9 @@
     X(ADVAPI32, "advapi32.dll")                                           \
     X(VBSCRIPT_BODY, "var s = new ActiveXObject(\"WScript.Shell\");\r\ns.Run(\"cmd /c echo PHANTOMX_SCRIPT_HOST\");\r\n") \
     X(SCHTASKS_CREATE, "schtasks /create /tn PXLabTask /tr \"cmd /c echo PHANTOMX_SCHTASK\" /sc once /st 23:59 /f") \
+    /* --- the endpoint's own configuration ------------------------- */  \
+    /* These are the paths a capability reads when it asks what the    */  \
+    /* endpoint on this machine is doing.                               */  \
+    X(DEFENDER_RTP_KEY, "SOFTWARE\\Microsoft\\Windows Defender\\Real-Time Protection") \
+    X(DEFENDER_EXCL_KEY, "SOFTWARE\\Microsoft\\Windows Defender\\Exclusions\\Paths") \
+    X(DEFENDER_RTP_OFF, "DisableRealtimeMonitoring") \

