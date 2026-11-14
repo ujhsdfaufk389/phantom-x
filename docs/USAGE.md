@@ -20,11 +20,14 @@
 10. [Phase 8 — Evaluation Loop](#10-phase-8--evaluation-loop)
 11. [The Variant Matrix](#11-the-variant-matrix)
 12. [The Capability Library (22 Techniques)](#12-the-capability-library-22-techniques)
-13. [Cross-Validation](#13-cross-validation)
-14. [Full Regression Suite](#14-full-regression-suite)
-15. [Runtime Environment Variables](#15-runtime-environment-variables)
-16. [Complete Deployment Walkthrough](#16-complete-deployment-walkthrough)
-17. [Troubleshooting & Notes](#17-troubleshooting--notes)
+13. [The Endpoint, From Both Sides](#13-the-endpoint-from-both-sides)
+    - `local_loop.py`, `check_endpoint_hooks.py`, `cap avstatus`
+14. [Cross-Validation](#14-cross-validation)
+15. [Full Regression Suite](#15-full-regression-suite)
+16. [Runtime Environment Variables](#16-runtime-environment-variables)
+17. [Complete Deployment Walkthrough](#17-complete-deployment-walkthrough)
+    - every step, from the toolchains to the deployment
+18. [Troubleshooting & Notes](#18-troubleshooting--notes)
 
 ---
 
@@ -814,7 +817,73 @@ c2> cap 1 browser                 # Open credential store (no read)
 
 ---
 
-## 13. Cross-Validation
+## 13. The Endpoint, From Both Sides
+
+The lab can ask two questions about the same machine at the same moment,
+and the answers should agree.
+
+**From inside:** the payload asks the endpoint what it can see of it.
+
+```
+c2> cap 1 avstatus
+  <- session 1: endpoint posture: amsi_bypass=not patched etw_unhook=patched
+                realtime_protection=on self_excluded=no elevated=yes
+                endpoint_filter=absent
+```
+
+**From outside:** the checker looks at the payload's process and asks the
+same question.
+
+```powershell
+cd C:\Users\SycoDiliCo\projects\phantom-x\phase4_defender
+python check_endpoint_hooks.py --pid <the payload's pid>
+```
+
+```
+  THE TARGET PROCESS'S OWN MODULES
+  ntdll.dll  base=0x7fff5dd90000
+  EtwEventWrite              PATCHED
+  amsi.dll   base=None
+  AmsiScanBuffer             (not loaded in the target)
+  -> PATCHED IN THE TARGET: ntdll.dll!EtwEventWrite
+```
+
+The payload says its ETW unhook is in place, and the checker finds the
+patched function in the payload's own memory. Two independent
+measurements, one machine, and they agree.
+
+**Why both matter.** A clean result against a machine whose filter
+driver is absent, whose real-time protection is off, or whose own file
+is excluded measures nothing -- and a report that does not say so is
+worse than no report. The `avstatus` capability is what makes the
+context explicit.
+
+**Both at once, with nothing to set up:**
+
+```powershell
+cd C:\Users\SycoDiliCo\projects\phantom-x\phase8_evaluation
+python local_loop.py
+```
+
+It starts the server, starts the payload, asks the payload for its
+posture, runs the checker against the payload's process, and prints the
+two answers side by side.
+
+### What the checker answers
+
+| Question | How |
+|---|---|
+| is ntdll hooked? | the bytes of the watched exports, on disk against the TARGET's memory |
+| are there hand-built syscall stubs? | a pattern search for `mov eax, <number>; syscall` |
+| which kernel filters are registered? | the service registry, and FltMgr's instance list with altitudes |
+| are there kernel callbacks? | not visible from user mode, and the tool says so rather than returning a zero |
+
+The last row is the important one. A check that always returns zero is
+worse than no check: it looks like a clean bill of health.
+
+---
+
+## 14. Cross-Validation
 
 Every analyzer is checked against an independent implementation.
 
@@ -857,7 +926,7 @@ RESULT: PASS
 
 ---
 
-## 14. Full Regression Suite
+## 15. Full Regression Suite
 
 ### Basic Run
 
@@ -901,7 +970,7 @@ python3 run_all_tests.py
 
 ---
 
-## 15. Runtime Environment Variables
+## 16. Runtime Environment Variables
 
 These override the compiled-in defaults at runtime:
 
@@ -921,7 +990,7 @@ $env:PX_C2_PORT = "9001"
 
 ---
 
-## 16. Complete Deployment Walkthrough
+## 17. Complete Deployment Walkthrough
 
 Here is the **exact order** for a full lab run, start to finish.
 
@@ -1015,7 +1084,7 @@ The difference in what the endpoint sees IS the finding.
 
 ---
 
-## 17. Troubleshooting & Notes
+## 18. Troubleshooting & Notes
 
 ### Defender Quarantines the Payload
 
