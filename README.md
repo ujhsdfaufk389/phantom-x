@@ -488,6 +488,28 @@ Every step, in the order it has to happen -- the toolchains, the isolation, the 
 
 ---
 
+## Findings
+
+The findings are in [`phase8_evaluation/findings/`](phase8_evaluation/findings/).
+
+**001 — the carrier PDF is detected by four vendors.** The carrier was
+submitted to VirusTotal and four engines flagged it: Microsoft
+(`Trojan:Win32/Wacatac.B!ml`), Kaspersky (`HEUR:Trojan.Win32.Agentb.gen`),
+Symantec (`ML.Attribute.HighConfidence`) and Arctic Wolf. The other 59
+returned Undetected.
+
+The verdict type is `file-embedded`, and that is the finding: **the PDF
+container is clean and the executable inside it is not.** A defender with
+only document inspection sees nothing; a defender with an endpoint agent
+sees it. That is a measured confirmation of something the rule set could
+only hypothesise.
+
+It is also the first result in this project that the lab did not
+manufacture -- the rules, the catalogue and the coverage matrix are all
+the lab marking its own homework.
+
+---
+
 ## Quick start
 
 ```bash
