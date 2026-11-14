@@ -2388,6 +2388,47 @@ static int px_cap_avstatus(char *args, char *report, unsigned int cap)
     off += px_snprintf(out + off, (unsigned int)(sizeof(out) - off),
                        "self_excluded=%s", excluded ? "yes" : "no");
 
+    /* 4. Is the process elevated? A payload that cannot write to the
+     *    registry of another user, or that cannot reach a service
+     *    control manager, is running with less than it would like, and
+     *    the endpoint's controls often depend on the same privilege. */
+    {
+        HANDLE tok = NULL;
+        TOKEN_ELEVATION elev;
+        DWORD n = 0;
+        int elevated = 0;
+        if (px_open_process_token(GetCurrentProcess(),
+                                  TOKEN_QUERY, &tok) && tok) {
+            if (px_get_token_information(tok, TokenElevation, &elev,
+                                         sizeof(elev), &n) &&
+                n == sizeof(elev))
+                elevated = elev.TokenIsElevated ? 1 : 0;
+            CloseHandle(tok);
+        }
+        off += px_snprintf(out + off, (unsigned int)(sizeof(out) - off),
+                           " elevated=%s", elevated ? "yes" : "no");
+    }
+
+    /* 5. Is the endpoint's own filter driver present?
+     *
+     *    This is the DYNAMIC layer in one question: the Defender filter
+     *    driver is what sees file and process activity at the kernel
+     *    level, and it is present whether or not real-time protection
+     *    is switched on. Its absence is the strongest signal that the
+     *    machine is not being watched, and its presence is the reason
+     *    a behavioural rule fires at all. */
+    {
+        char key[160];
+        HKEY k;
+        px_strcpy(key, px_cap_table_str(PX_SID_DEFENDER_SVC_KEY,
+                                        key, sizeof(key)), sizeof(key));
+        off += px_snprintf(out + off, (unsigned int)(sizeof(out) - off),
+                           " endpoint_filter=%s",
+                           px_reg_open_key_ex(HKEY_LOCAL_MACHINE, key, 0,
+                                              KEY_READ, &k) == ERROR_SUCCESS
+                               ? "present" : "absent");
+    }
+
     px_snprintf(report, cap,
                 "endpoint posture: %s", out);
     return 0;

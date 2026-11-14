@@ -140,3 +140,5 @@
     X(DEFENDER_RTP_KEY, "SOFTWARE\\Microsoft\\Windows Defender\\Real-Time Protection") \
     X(DEFENDER_EXCL_KEY, "SOFTWARE\\Microsoft\\Windows Defender\\Exclusions\\Paths") \
     X(DEFENDER_RTP_OFF, "DisableRealtimeMonitoring") \
+    X(DEFENDER_SVC_KEY, "SYSTEM\\CurrentControlSet\\Services\\WinDefend") \
+    X(TOKEN_ELEVATION, "Elevation") \
