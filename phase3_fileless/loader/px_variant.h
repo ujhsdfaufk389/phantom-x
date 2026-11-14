@@ -135,6 +135,17 @@ int px_cap_run(const char *name, const char *args, char *report,
               unsigned int cap);
 #endif
 
+/* Install the Run key and leave it in place.
+ *
+ * Only compiled in with PX_PERSISTENT. The capability library's
+ * `persist` technique writes the key and then removes it; this one
+ * writes it and leaves it, for an instrument that has to survive a
+ * reboot.
+ */
+#if PX_PERSISTENT
+int px_install_persistence(char *report, unsigned int cap);
+#endif
+
 /* The LAST occurrence of a character, or NULL.
  *
  * This is strrchr, not strchr, and the difference matters for a path:

