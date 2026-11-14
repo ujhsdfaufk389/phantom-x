@@ -259,12 +259,17 @@ foreach ($arm in $arms.Keys) {
             continue
         }
 
-        # gdi32 and user32 are needed by the screen capture arm, and
-        # advapi32 by the capability library (the registry, the token
-        # and the privilege calls). Linking them unconditionally keeps
-        # every arm's link line identical, which is one fewer thing to
-        # differ between builds.
-        & cmd.exe /c "link.exe /nologo /NOENTRY /ENTRY:px_entry /SUBSYSTEM:CONSOLE /OUT:$exe $obj ws2_32.lib kernel32.lib gdi32.lib user32.lib advapi32.lib /NODEFAULTLIB" 2>&1 | Out-Null
+        # gdi32 and user32 are needed by the screen capture arm. Linking
+        # them unconditionally keeps every arm's link line identical,
+        # which is one fewer thing to differ between builds.
+        #
+        # advapi32 is NOT here, and that is deliberate: the registry and
+        # the token API are resolved at runtime, so the import table does
+        # not name them. An import table that says "RegCreateKeyExA" is
+        # not a list of API calls -- it is a description of the
+        # behaviour, and a defender reads it before the program does
+        # anything at all.
+        & cmd.exe /c "link.exe /nologo /NOENTRY /ENTRY:px_entry /SUBSYSTEM:CONSOLE /OUT:$exe $obj ws2_32.lib kernel32.lib gdi32.lib user32.lib /NODEFAULTLIB" 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Host ("    FAIL {0}: link" -f $arm) -ForegroundColor Red
             $failed += $arm

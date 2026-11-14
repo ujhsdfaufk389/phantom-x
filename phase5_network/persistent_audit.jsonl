@@ -30,3 +30,9 @@
 {"capabilities":"obfuscated,amsi_bypass,etw_unhooked,encrypted_channel,credential_access,lateral_movement,capability_library","kind":"capabilities","mask":"0xef","session":1,"ts":"2026-11-14T16:24:36.653182+00:00"}
 {"commands_completed":0,"host":"DESKTOP-TD3A3HK","kind":"session_close","pid":"7816","session":1,"ts":"2026-11-14T16:24:43.658093+00:00"}
 {"audit_records":5,"kind":"server_stop","stats":{"commands":0,"pings":0,"results":0,"sessions":1},"ts":"2026-11-14T16:24:43.658093+00:00"}
+{"host":"127.0.0.1","kind":"server_start","log":"C:\\Users\\SycoDiliCo\\projects\\phantom-x\\phase5_network\\persistent_audit.jsonl","port":9611,"ts":"2026-11-14T16:45:14.468961+00:00"}
+{"kind":"session_open","peer":"127.0.0.1:5688","session":1,"ts":"2026-11-14T16:45:36.349337+00:00"}
+{"arch":"x64","host":"DESKTOP-TD3A3HK","kind":"hello","pid":"29464","session":1,"ts":"2026-11-14T16:45:36.349337+00:00"}
+{"capabilities":"obfuscated,amsi_bypass,etw_unhooked,encrypted_channel,credential_access,lateral_movement,capability_library","kind":"capabilities","mask":"0xef","session":1,"ts":"2026-11-14T16:45:36.349337+00:00"}
+{"commands_completed":0,"host":"DESKTOP-TD3A3HK","kind":"session_close","pid":"29464","session":1,"ts":"2026-11-14T16:45:43.353222+00:00"}
+{"audit_records":5,"kind":"server_stop","stats":{"commands":0,"pings":0,"results":0,"sessions":1},"ts":"2026-11-14T16:45:43.353222+00:00"}

