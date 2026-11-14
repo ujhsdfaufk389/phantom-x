@@ -2129,7 +2129,19 @@ connect_again:
                 int r = p_recv(sock, (char *)hdr + got, (int)(4 - got), 0);
                 if (r <= 0) {
                     px_logf(g_vocab.log_closed);
-                    goto done;
+                    /* NOT 'goto done'.                              */
+                    /*                                    */
+                    /* The peer closed the connection. That is the  */
+                    /* ORDINARY end of a session, not a fatal     */
+                    /* error, and the resilient arm has to be able */
+                    /* to come back from it.                     */
+                    /*                                    */
+                    /* 'goto done' skipped the reconnect entirely, */
+                    /* so the encrypted arm EXITED where the      */
+                    /* plain arm reconnected. The two arms were  */
+                    /* supposed to differ in one way -- the       */
+                    /* channel -- and they differed in two.        */
+                    goto session_ended;
                 }
                 got += (unsigned int)r;
             }
@@ -2459,7 +2471,14 @@ connect_again:
         }
     }
 
-    /* The session ended. */
+session_ended:
+    /* The session ended.
+     *
+     * The label exists so that the encrypted path can end a session
+     * the same way the plain path does. The plain path falls out of
+     * its receive loop and lands here; the encrypted path used to jump
+     * straight to 'done', which skipped the reconnect entirely.
+     */
     p_closesocket(sock);
     sock = PX_INVALID_SOCKET;
 

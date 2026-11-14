@@ -6,3 +6,12 @@
 {"ts": "2026-11-10T21:15:14.107505+00:00", "kind": "session_close", "session": 1, "host": "KALI", "pid": "1000", "commands_completed": 0}
 {"ts": "2026-11-10T21:15:14.107884+00:00", "kind": "server_stop", "stats": {"sessions": 2, "commands": 0, "results": 0, "pings": 0}, "audit_records": 6}
 {"ts": "2026-11-10T21:15:34.162767+00:00", "kind": "server_start", "host": "0.0.0.0", "port": 9001, "log": "c2_audit.jsonl"}
+{"host":"127.0.0.1","kind":"server_start","log":"c2_audit.jsonl","port":9001,"ts":"2026-11-14T17:51:28.795501+00:00"}
+{"kind":"session_open","peer":"127.0.0.1:57256","session":1,"ts":"2026-11-14T17:52:03.052637+00:00"}
+{"arch":"x64","host":"DESKTOP-TD3A3HK","kind":"hello","pid":"30476","session":1,"ts":"2026-11-14T17:52:03.053640+00:00"}
+{"capabilities":"obfuscated,amsi_bypass,etw_unhooked,encrypted_channel,credential_access,lateral_movement,capability_library","kind":"capabilities","mask":"0xef","session":1,"ts":"2026-11-14T17:52:03.053640+00:00"}
+{"commands_completed":0,"host":"DESKTOP-TD3A3HK","kind":"session_close","pid":"30476","session":1,"ts":"2026-11-14T17:52:33.053687+00:00"}
+{"kind":"session_open","peer":"127.0.0.1:56560","session":2,"ts":"2026-11-14T17:53:46.477705+00:00"}
+{"arch":"x64","host":"DESKTOP-TD3A3HK","kind":"hello","pid":"32744","session":2,"ts":"2026-11-14T17:53:46.478212+00:00"}
+{"capabilities":"obfuscated,amsi_bypass,etw_unhooked,encrypted_channel,credential_access,lateral_movement,capability_library","kind":"capabilities","mask":"0xef","session":2,"ts":"2026-11-14T17:53:46.478212+00:00"}
+{"commands_completed":0,"host":"DESKTOP-TD3A3HK","kind":"session_close","pid":"32744","session":2,"ts":"2026-11-14T17:54:04.529178+00:00"}

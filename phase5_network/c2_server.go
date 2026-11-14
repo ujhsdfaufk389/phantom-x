@@ -93,6 +93,12 @@ const (
 // out of their own capture.
 const DefaultChannelKey = "phantomx-lab-key-0123456789abcdef"
 
+// How long a session may be quiet before it is closed.
+//
+// A package-level value, because the read deadline is set in the
+// client loop and the flag is parsed in main.
+var idleTimeout = 10 * time.Minute
+
 // tsFormat matches the Python reference's datetime.isoformat() output so both
 // audit logs can be diffed line by line.
 const tsFormat = "2006-01-02T15:04:05.000000-07:00"
@@ -569,7 +575,7 @@ func (s *Server) clientLoop(sess *Session) {
 	reader := bufio.NewReaderSize(sess.conn, readBufSize)
 
 	for s.isRunning() && sess.alive {
-		sess.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+		sess.conn.SetReadDeadline(time.Now().Add(idleTimeout))
 
 		// The encrypted arm reads whole FRAMES.
 		//
@@ -1355,7 +1361,24 @@ func main() {
 	duration := flag.Int("duration", 0, "stop automatically after N seconds (0 = run forever)")
 	key := flag.String("key", "", "shared channel key for the encrypted-channel variant (default: the built-in lab key)")
 	quarantine := flag.String("quarantine", "", "directory to write received file transfers into")
+	// The idle timeout.
+	//
+	// A session that goes quiet for thirty seconds is closed, and the
+	// payload sees the connection close and -- unless it is the
+	// resilient arm -- exits. For a server that a person is driving
+	// from a console, thirty seconds is not an idle session, it is
+	// somebody reading the screen.
+	//
+	// The default is ten minutes, and it can be set with --idle.
+	idleFlag := flag.Duration("idle", idleTimeout,
+		"close a session after this long without traffic")
 	flag.Parse()
+	// AFTER flag.Parse().
+	//
+	// Reading the flag before parsing it gives the DEFAULT, whatever
+	// was on the command line: the flag's target is set by Parse, and
+	// the copy taken here is taken before that happens.
+	idleTimeout = *idleFlag
 
 	fmt.Print(banner)
 
