@@ -1,0 +1,17 @@
+﻿[
+    {
+        "file":  "px_carrier.pdf",
+        "bytes":  32348,
+        "sha256":  "adf18195e76591f7056550c4933125d2f8210e1a6112e037d4b7949024560f19"
+    },
+    {
+        "file":  "px_loader.exe",
+        "bytes":  193536,
+        "sha256":  "8ef92d86c5227f28ce8775c8ac4e73f030f1b4f221ddb6d14679b39f64fa27b9"
+    },
+    {
+        "file":  "px_payload_stealth.exe",
+        "bytes":  66560,
+        "sha256":  "fa452aa5821db61851c086ca2cd59fa49feabdd0c4e88f0ba41891118292e357"
+    }
+]

