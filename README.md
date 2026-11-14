@@ -482,6 +482,18 @@ phantom-x/
 
 ## The complete walk-through
 
+
+
+### Putting the C2 behind a Cloudflare Tunnel
+
+For testing the chain across the internet -- the C2 on your machine, the payload on
+a Windows machine on another network -- see
+
+    docs/CLOUDFLARE-TUNNEL.md
+
+The payload's transport is raw TCP and Cloudflare's edge speaks HTTP, so the
+three ways to make them meet differ in what has to exist on the far machine.
+
 Every step, in the order it has to happen -- the toolchains, the isolation, the build, the run, the telemetry, the evaluation, and the things that will bite you -- is in
 
     docs/USAGE.md
